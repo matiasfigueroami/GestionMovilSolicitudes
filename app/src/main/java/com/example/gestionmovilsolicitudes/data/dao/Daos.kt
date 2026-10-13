@@ -1,0 +1,134 @@
+package com.example.gestionmovilsolicitudes.data.dao
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.Query
+import androidx.room.Update
+import com.example.gestionmovilsolicitudes.data.entity.ClienteEntity
+import com.example.gestionmovilsolicitudes.data.entity.EvidenciaEntity
+import com.example.gestionmovilsolicitudes.data.entity.HistorialEntity
+import com.example.gestionmovilsolicitudes.data.entity.SolicitudEntity
+import com.example.gestionmovilsolicitudes.data.entity.UsuarioEntity
+import com.example.gestionmovilsolicitudes.model.EstadoSolicitud
+import com.example.gestionmovilsolicitudes.model.Perfil
+import com.example.gestionmovilsolicitudes.model.Prioridad
+import kotlinx.coroutines.flow.Flow
+
+data class ConteoEstado(val estado: EstadoSolicitud, val total: Int)
+data class ConteoPrioridad(val prioridad: Prioridad?, val total: Int)
+data class ConteoResponsable(val responsableId: Long?, val total: Int)
+
+@Dao
+interface UsuarioDao {
+    @Insert
+    suspend fun insertar(usuario: UsuarioEntity): Long
+
+    @Query("SELECT * FROM usuarios WHERE correo = :correo AND password = :password AND activo = 1 LIMIT 1")
+    suspend fun login(correo: String, password: String): UsuarioEntity?
+
+    @Query("SELECT * FROM usuarios WHERE id = :id")
+    suspend fun obtenerPorId(id: Long): UsuarioEntity?
+
+    @Query("SELECT * FROM usuarios WHERE perfil = :perfil AND activo = 1 ORDER BY nombre")
+    fun observarPorPerfil(perfil: Perfil): Flow<List<UsuarioEntity>>
+
+    @Query("SELECT COUNT(*) FROM usuarios")
+    suspend fun contar(): Int
+}
+
+@Dao
+interface ClienteDao {
+    @Insert
+    suspend fun insertar(cliente: ClienteEntity): Long
+
+    @Query("SELECT * FROM clientes WHERE id = :id")
+    suspend fun obtenerPorId(id: Long): ClienteEntity?
+
+    @Query("SELECT * FROM clientes ORDER BY nombreCliente")
+    fun observarTodos(): Flow<List<ClienteEntity>>
+}
+
+@Dao
+interface SolicitudDao {
+    @Insert
+    suspend fun insertar(solicitud: SolicitudEntity): Long
+
+    @Update
+    suspend fun actualizar(solicitud: SolicitudEntity)
+
+    @Query("SELECT * FROM solicitudes WHERE id = :id")
+    fun observarPorId(id: Long): Flow<SolicitudEntity?>
+
+    @Query("SELECT * FROM solicitudes WHERE id = :id")
+    suspend fun obtenerPorId(id: Long): SolicitudEntity?
+
+    @Query("SELECT * FROM solicitudes WHERE codigoSeguimiento = :codigo LIMIT 1")
+    suspend fun obtenerPorCodigo(codigo: String): SolicitudEntity?
+
+    @Query("SELECT COUNT(*) FROM solicitudes")
+    suspend fun contar(): Int
+
+    @Query("SELECT * FROM solicitudes WHERE clienteId = :clienteId ORDER BY fechaActualizacion DESC")
+    fun observarPorCliente(clienteId: Long): Flow<List<SolicitudEntity>>
+
+    @Query("SELECT * FROM solicitudes WHERE responsableId = :tecnicoId ORDER BY fechaActualizacion DESC")
+    fun observarPorResponsable(tecnicoId: Long): Flow<List<SolicitudEntity>>
+
+    /** Filtros opcionales: un parametro null significa "sin filtro". */
+    @Query(
+        """
+        SELECT * FROM solicitudes
+        WHERE (:estado IS NULL OR estado = :estado)
+          AND (:prioridad IS NULL OR prioridad = :prioridad)
+          AND (:clienteId IS NULL OR clienteId = :clienteId)
+          AND (:responsableId IS NULL OR responsableId = :responsableId)
+          AND (:texto IS NULL OR titulo LIKE '%' || :texto || '%' OR codigoSeguimiento LIKE '%' || :texto || '%')
+        ORDER BY fechaActualizacion DESC
+        """
+    )
+    fun filtrar(
+        estado: EstadoSolicitud? = null,
+        prioridad: Prioridad? = null,
+        clienteId: Long? = null,
+        responsableId: Long? = null,
+        texto: String? = null
+    ): Flow<List<SolicitudEntity>>
+
+    /** Atrasadas: sin resolver y creadas antes de [limite] (epoch millis). */
+    @Query(
+        """
+        SELECT * FROM solicitudes
+        WHERE fechaCreacion < :limite
+          AND estado NOT IN ('RESUELTA', 'CERRADA', 'CANCELADA')
+        ORDER BY fechaCreacion
+        """
+    )
+    fun observarAtrasadas(limite: Long): Flow<List<SolicitudEntity>>
+
+    @Query("SELECT estado, COUNT(*) AS total FROM solicitudes GROUP BY estado")
+    fun conteoPorEstado(): Flow<List<ConteoEstado>>
+
+    @Query("SELECT prioridad, COUNT(*) AS total FROM solicitudes GROUP BY prioridad")
+    fun conteoPorPrioridad(): Flow<List<ConteoPrioridad>>
+
+    @Query("SELECT responsableId, COUNT(*) AS total FROM solicitudes GROUP BY responsableId")
+    fun conteoPorResponsable(): Flow<List<ConteoResponsable>>
+}
+
+@Dao
+interface HistorialDao {
+    @Insert
+    suspend fun insertar(evento: HistorialEntity): Long
+
+    @Query("SELECT * FROM historial WHERE solicitudId = :solicitudId ORDER BY fechaHora ASC, id ASC")
+    fun observarPorSolicitud(solicitudId: Long): Flow<List<HistorialEntity>>
+}
+
+@Dao
+interface EvidenciaDao {
+    @Insert
+    suspend fun insertar(evidencia: EvidenciaEntity): Long
+
+    @Query("SELECT * FROM evidencias WHERE solicitudId = :solicitudId ORDER BY fechaIncorporacion DESC")
+    fun observarPorSolicitud(solicitudId: Long): Flow<List<EvidenciaEntity>>
+}
