@@ -11,6 +11,7 @@ import com.example.gestionmovilsolicitudes.model.Categoria
 import com.example.gestionmovilsolicitudes.model.EstadoSolicitud
 import com.example.gestionmovilsolicitudes.model.Perfil
 import com.example.gestionmovilsolicitudes.model.Prioridad
+import kotlinx.coroutines.flow.Flow          // ← NUEVO
 import java.util.Calendar
 
 class SolicitudRepository(private val db: AppDatabase) {
@@ -20,14 +21,14 @@ class SolicitudRepository(private val db: AppDatabase) {
     private val evidenciaDao = db.evidenciaDao()
 
     // ---------- Crear ----------
-
     suspend fun crear(
         usuario: UsuarioEntity,
         titulo: String,
         descripcion: String,
         categoria: Categoria,
         servicio: String? = null,
-        sitio: String? = null
+        sitio: String? = null,
+        evidenciaUri: String? = null        // ← NUEVO
     ): Long = db.withTransaction {
         require(usuario.perfil == Perfil.CLIENTE && usuario.clienteId != null) {
             "Solo un cliente puede crear solicitudes"
@@ -43,7 +44,8 @@ class SolicitudRepository(private val db: AppDatabase) {
                 descripcion = descripcion.trim(),
                 categoria = categoria,
                 servicioRelacionado = servicio,
-                sitioOActivoRelacionado = sitio
+                sitioOActivoRelacionado = sitio,
+                evidenciaUri = evidenciaUri    // ← NUEVO
             )
         )
         registrarHistorial(id, null, EstadoSolicitud.RECIBIDA, "Solicitud creada", null, usuario)
@@ -103,7 +105,6 @@ class SolicitudRepository(private val db: AppDatabase) {
             val tecnico = db.usuarioDao().obtenerPorId(tecnicoId)
             check(tecnico != null && tecnico.perfil == Perfil.TECNICO) { "Responsable inválido" }
 
-            // Primera asignación: pasa a ASIGNADA. Reasignación: conserva el estado.
             val nuevoEstado = if (s.estado == EstadoSolicitud.EN_REVISION) EstadoSolicitud.ASIGNADA else s.estado
             solicitudDao.actualizar(
                 s.copy(responsableId = tecnicoId, estado = nuevoEstado, fechaActualizacion = System.currentTimeMillis())
@@ -141,9 +142,52 @@ class SolicitudRepository(private val db: AppDatabase) {
         registrarHistorial(s.id, s.estado, s.estado, "Evidencia adjuntada: $nombre", null, usuario, evidenciaId)
     }
 
+    // ---------- Consultas / edición ----------   ← NUEVO BLOQUE
+
+    /** Qué solicitudes ve cada perfil */
+    fun observarVisibles(usuario: UsuarioEntity): Flow<List<SolicitudEntity>> =
+        when (usuario.perfil) {
+            Perfil.CLIENTE -> solicitudDao.observarPorCliente(usuario.clienteId ?: -1)
+            Perfil.ADMINISTRADOR -> solicitudDao.filtrar()
+            Perfil.TECNICO -> solicitudDao.observarPorResponsable(usuario.id)
+        }
+
+    suspend fun obtener(id: Long, usuario: UsuarioEntity): SolicitudEntity {
+        val s = solicitudDao.obtenerPorId(id) ?: error("La solicitud no existe")
+        verificarAcceso(s, usuario)
+        return s
+    }
+
+    suspend fun editar(
+        solicitudId: Long,
+        usuario: UsuarioEntity,
+        titulo: String,
+        descripcion: String,
+        categoria: Categoria,
+        servicio: String?,
+        evidenciaUri: String?
+    ) = db.withTransaction {
+        check(usuario.perfil != Perfil.TECNICO) { "El técnico no puede editar los datos de la solicitud" }
+        val s = solicitudDao.obtenerPorId(solicitudId) ?: error("La solicitud no existe")
+        verificarAcceso(s, usuario)
+        check(s.estado != EstadoSolicitud.CERRADA && s.estado != EstadoSolicitud.CANCELADA) {
+            "No se puede editar una solicitud cerrada o cancelada"
+        }
+        solicitudDao.actualizar(
+            s.copy(
+                titulo = titulo.trim(),
+                descripcion = descripcion.trim(),
+                categoria = categoria,
+                servicioRelacionado = servicio?.trim()?.ifBlank { null },
+                evidenciaUri = evidenciaUri,
+                fechaActualizacion = System.currentTimeMillis()
+            )
+        )
+        registrarHistorial(s.id, s.estado, s.estado, "Datos de la solicitud editados", null, usuario)
+    }
+
     // ---------- Reglas internas ----------
 
-    /** Cliente: solo lo suyo. Técnico: solo lo asignado. Admin: todo. */
     private fun verificarAcceso(s: SolicitudEntity, u: UsuarioEntity) {
         val ok = when (u.perfil) {
             Perfil.ADMINISTRADOR -> true

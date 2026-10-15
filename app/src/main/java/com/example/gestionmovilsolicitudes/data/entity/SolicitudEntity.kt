@@ -37,6 +37,7 @@ data class SolicitudEntity(
     val prioridad: Prioridad? = null,
     val servicioRelacionado: String? = null,
     val sitioOActivoRelacionado: String? = null,
+    val evidenciaUri: String? = null,
     val estado: EstadoSolicitud = EstadoSolicitud.RECIBIDA,
     val responsableId: Long? = null,
     val comentariosSeguimiento: String? = null,
@@ -44,5 +45,6 @@ data class SolicitudEntity(
     val fechaActualizacion: Long = System.currentTimeMillis(),
     val fechaResolucion: Long? = null,
     val confirmacionCierre: Boolean = false,
-    val motivoCancelacion: String? = null
+    val motivoCancelacion: String? = null,
+
 )

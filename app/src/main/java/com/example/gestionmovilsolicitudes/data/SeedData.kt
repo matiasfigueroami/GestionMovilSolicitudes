@@ -70,7 +70,7 @@ object SeedData {
                     codigoSeguimiento = codigo, clienteId = clienteId, titulo = titulo,
                     descripcion = desc, categoria = categoria, prioridad = prioridad,
                     estado = estado, responsableId = responsable,
-                    fechaCreacion = creada, fechaActualizacion = ahora
+                    fechaCreacion = creada, fechaActualizacion = ahora,
                 )
             )
             db.historialDao().insertar(
