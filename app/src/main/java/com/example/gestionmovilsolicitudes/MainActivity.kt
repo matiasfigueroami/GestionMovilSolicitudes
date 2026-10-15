@@ -10,6 +10,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
 import com.example.gestionmovilsolicitudes.ui.navigation.AppNavigation
 import com.example.gestionmovilsolicitudes.ui.theme.GestionMovilSolicitudesTheme
+import androidx.compose.foundation.layout.consumeWindowInsets
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -18,7 +19,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             GestionMovilSolicitudesTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    androidx.compose.foundation.layout.Box(Modifier.padding(innerPadding)) {
+                    androidx.compose.foundation.layout.Box(Modifier.padding(innerPadding).consumeWindowInsets(innerPadding)) {
                         AppNavigation()
                     }
                 }
