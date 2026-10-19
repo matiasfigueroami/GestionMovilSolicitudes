@@ -1,7 +1,11 @@
 package com.example.gestionmovilsolicitudes.ui.solicitud
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,9 +24,11 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,12 +36,18 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gestionmovilsolicitudes.model.Categoria
 import com.example.gestionmovilsolicitudes.model.etiqueta
+import coil3.compose.AsyncImage
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,6 +58,23 @@ fun SolicitudFormScreen(
 ) {
     val state by vm.uiState.collectAsState()
     var menuAbierto by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    var rutaPendiente by rememberSaveable { mutableStateOf<String?>(null) }
+    val camara = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { exito ->
+        val archivo = rutaPendiente?.let { File(it) }
+        if (exito && archivo != null) {
+            vm.onEvidenciaChange(Uri.fromFile(archivo).toString())
+        } else {
+            archivo?.delete()
+        }
+        rutaPendiente = null
+    }
+    val tomarFoto = {
+        val archivo = crearArchivoEvidencia(context)
+        rutaPendiente = archivo.absolutePath
+        camara.launch(uriParaCamara(context, archivo))
+    }
 
     // Al entrar: formulario vacío (nueva) o datos cargados (editar)
     LaunchedEffect(solicitudId) {
@@ -139,6 +168,27 @@ fun SolicitudFormScreen(
                 supportingText = { Text(state.servicioError ?: "") },
                 modifier = Modifier.fillMaxWidth()
             )
+
+            Text("Evidencia (foto)", style = MaterialTheme.typography.titleSmall)
+            state.evidenciaUri?.let { uri ->
+                AsyncImage(
+                    model = uri,
+                    contentDescription = "Foto de evidencia de la solicitud",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .clip(MaterialTheme.shapes.medium)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { tomarFoto() }) {
+                    Text(if (state.evidenciaUri == null) "Tomar foto" else "Cambiar foto")
+                }
+                if (state.evidenciaUri != null) {
+                    TextButton(onClick = { vm.onEvidenciaChange(null) }) { Text("Quitar") }
+                }
+            }
 
             state.mensajeError?.let {
                 Text(it, color = MaterialTheme.colorScheme.error)
