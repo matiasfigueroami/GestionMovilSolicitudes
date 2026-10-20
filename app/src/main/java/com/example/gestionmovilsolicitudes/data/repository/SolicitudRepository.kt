@@ -13,7 +13,9 @@ import com.example.gestionmovilsolicitudes.model.Perfil
 import com.example.gestionmovilsolicitudes.model.Prioridad
 import kotlinx.coroutines.flow.Flow          // ← NUEVO
 import java.util.Calendar
-
+import com.example.gestionmovilsolicitudes.data.dao.EventoHistorial
+import com.example.gestionmovilsolicitudes.data.dao.SolicitudDetalle
+import kotlinx.coroutines.flow.map
 class SolicitudRepository(private val db: AppDatabase) {
 
     private val solicitudDao = db.solicitudDao()
@@ -152,6 +154,14 @@ class SolicitudRepository(private val db: AppDatabase) {
             Perfil.TECNICO -> solicitudDao.observarPorResponsable(usuario.id)
         }
 
+    /** Detalle de una solicitud; emite null si no existe o el usuario no tiene acceso. */
+    fun observarDetalle(id: Long, usuario: UsuarioEntity): Flow<SolicitudDetalle?> =
+        solicitudDao.observarDetalle(id).map { d -> d?.takeIf { tieneAcceso(it.solicitud, usuario) } }
+
+    fun observarHistorial(id: Long): Flow<List<EventoHistorial>> =
+        historialDao.observarDetallado(id)
+
+
     suspend fun obtener(id: Long, usuario: UsuarioEntity): SolicitudEntity {
         val s = solicitudDao.obtenerPorId(id) ?: error("La solicitud no existe")
         verificarAcceso(s, usuario)
@@ -188,13 +198,14 @@ class SolicitudRepository(private val db: AppDatabase) {
 
     // ---------- Reglas internas ----------
 
+    private fun tieneAcceso(s: SolicitudEntity, u: UsuarioEntity): Boolean = when (u.perfil) {
+        Perfil.ADMINISTRADOR -> true
+        Perfil.CLIENTE -> s.clienteId == u.clienteId
+        Perfil.TECNICO -> s.responsableId == u.id
+    }
+
     private fun verificarAcceso(s: SolicitudEntity, u: UsuarioEntity) {
-        val ok = when (u.perfil) {
-            Perfil.ADMINISTRADOR -> true
-            Perfil.CLIENTE -> s.clienteId == u.clienteId
-            Perfil.TECNICO -> s.responsableId == u.id
-        }
-        check(ok) { "No tienes acceso a esta solicitud" }
+        check(tieneAcceso(s, u)) { "No tienes acceso a esta solicitud" }
     }
 
     private fun exigirAdmin(u: UsuarioEntity) =

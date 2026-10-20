@@ -13,11 +13,27 @@ import com.example.gestionmovilsolicitudes.model.EstadoSolicitud
 import com.example.gestionmovilsolicitudes.model.Perfil
 import com.example.gestionmovilsolicitudes.model.Prioridad
 import kotlinx.coroutines.flow.Flow
-
+import androidx.room.Embedded
 data class ConteoEstado(val estado: EstadoSolicitud, val total: Int)
 data class ConteoPrioridad(val prioridad: Prioridad?, val total: Int)
 data class ConteoResponsable(val responsableId: Long?, val total: Int)
+data class SolicitudDetalle(
+    @Embedded val solicitud: SolicitudEntity,
+    val clienteNombre: String?,
+    val responsableNombre: String?
+)
 
+/** Evento del historial con el nombre del usuario que lo realizó. */
+data class EventoHistorial(
+    val id: Long,
+    val estadoAnterior: EstadoSolicitud?,
+    val estadoNuevo: EstadoSolicitud,
+    val accionRealizada: String,
+    val comentario: String?,
+    val perfil: Perfil,
+    val nombreUsuario: String,
+    val fechaHora: Long
+)
 @Dao
 interface UsuarioDao {
     @Insert
@@ -64,6 +80,17 @@ interface SolicitudDao {
 
     @Query("SELECT * FROM solicitudes WHERE codigoSeguimiento = :codigo LIMIT 1")
     suspend fun obtenerPorCodigo(codigo: String): SolicitudEntity?
+
+    @Query(
+        """
+    SELECT s.*, c.nombreCliente AS clienteNombre, u.nombre AS responsableNombre
+    FROM solicitudes s
+    LEFT JOIN clientes c ON c.id = s.clienteId
+    LEFT JOIN usuarios u ON u.id = s.responsableId
+    WHERE s.id = :id
+    """
+    )
+    fun observarDetalle(id: Long): Flow<SolicitudDetalle?>
 
     @Query("SELECT COUNT(*) FROM solicitudes")
     suspend fun contar(): Int
@@ -122,6 +149,20 @@ interface HistorialDao {
 
     @Query("SELECT * FROM historial WHERE solicitudId = :solicitudId ORDER BY fechaHora ASC, id ASC")
     fun observarPorSolicitud(solicitudId: Long): Flow<List<HistorialEntity>>
+
+    @Query(
+        """
+    SELECT h.id AS id, h.estadoAnterior AS estadoAnterior, h.estadoNuevo AS estadoNuevo,
+           h.accionRealizada AS accionRealizada, h.comentario AS comentario,
+           h.perfilQueRealizoAccion AS perfil, u.nombre AS nombreUsuario, h.fechaHora AS fechaHora
+    FROM historial h
+    INNER JOIN usuarios u ON u.id = h.usuarioResponsableId
+    WHERE h.solicitudId = :solicitudId
+    ORDER BY h.fechaHora ASC, h.id ASC
+    """
+    )
+    fun observarDetallado(solicitudId: Long): Flow<List<EventoHistorial>>
+
 }
 
 @Dao

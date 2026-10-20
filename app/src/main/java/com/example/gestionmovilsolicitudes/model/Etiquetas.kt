@@ -23,3 +23,16 @@ fun EstadoSolicitud.etiqueta(): String = when (this) {
     EstadoSolicitud.CERRADA -> "Cerrada"
     EstadoSolicitud.CANCELADA -> "Cancelada"
 }
+
+fun Prioridad.etiqueta(): String = when (this) {
+    Prioridad.BAJA -> "Baja"
+    Prioridad.MEDIA -> "Media"
+    Prioridad.ALTA -> "Alta"
+    Prioridad.URGENTE -> "Urgente"
+}
+
+fun Perfil.etiqueta(): String = when (this) {
+    Perfil.CLIENTE -> "Cliente"
+    Perfil.ADMINISTRADOR -> "Administrador"
+    Perfil.TECNICO -> "Técnico"
+}

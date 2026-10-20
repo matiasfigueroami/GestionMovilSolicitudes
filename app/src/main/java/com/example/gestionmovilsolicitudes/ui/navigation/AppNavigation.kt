@@ -12,16 +12,18 @@ import androidx.navigation.navArgument
 import com.example.gestionmovilsolicitudes.session.SessionManager
 import com.example.gestionmovilsolicitudes.ui.login.LoginScreen
 import com.example.gestionmovilsolicitudes.ui.menu.MenuScreen
+import com.example.gestionmovilsolicitudes.ui.solicitud.DetalleSolicitudScreen
 import com.example.gestionmovilsolicitudes.ui.solicitud.ListaSolicitudesScreen
 import com.example.gestionmovilsolicitudes.ui.solicitud.SolicitudFormScreen
-
 object Rutas {
     const val LOGIN = "login"
     const val MENU = "menu"
     const val LISTA = "lista"
     const val FORM = "form?id={id}"
-
     fun form(id: Long? = null) = if (id == null) "form" else "form?id=$id"
+
+    const val DETALLE = "detalle/{id}"
+    fun detalle(id: Long) = "detalle/$id"
 }
 
 @Composable
@@ -49,10 +51,23 @@ fun AppNavigation() {
             )
         }
 
+
         composable(Rutas.LISTA) {
             ListaSolicitudesScreen(
                 onNueva = { nav.navigate(Rutas.form()) },
-                onAbrir = { id -> nav.navigate(Rutas.form(id)) },
+                onAbrir = { id -> nav.navigate(Rutas.detalle(id)) },
+                onVolver = { nav.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Rutas.DETALLE,
+            arguments = listOf(navArgument("id") { type = NavType.LongType })
+        ) { entry ->
+            val id = entry.arguments?.getLong("id") ?: -1L
+            DetalleSolicitudScreen(
+                solicitudId = id,
+                onEditar = { nav.navigate(Rutas.form(id)) },
                 onVolver = { nav.popBackStack() }
             )
         }
