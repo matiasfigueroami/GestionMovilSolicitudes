@@ -2,6 +2,7 @@ package com.example.gestionmovilsolicitudes.ui.solicitud
 
 import com.example.gestionmovilsolicitudes.data.dao.EventoHistorial
 import com.example.gestionmovilsolicitudes.data.entity.SolicitudEntity
+import com.example.gestionmovilsolicitudes.data.entity.UsuarioEntity   // ← NUEVO import
 import com.example.gestionmovilsolicitudes.model.EstadoSolicitud
 import com.example.gestionmovilsolicitudes.model.Perfil
 
@@ -12,6 +13,12 @@ data class DetalleUiState(
     val clienteNombre: String? = null,
     val responsableNombre: String? = null,
     val historial: List<EventoHistorial> = emptyList(),
+
+    // ---- NUEVOS (los 3) ----
+    val esAdmin: Boolean = false,
+    val tecnicos: List<UsuarioEntity> = emptyList(),
+    val estadosDisponibles: List<EstadoSolicitud> = emptyList(),
+    // -------------------------
 
     val comentario: String = "",
     val comentarioError: String? = null,

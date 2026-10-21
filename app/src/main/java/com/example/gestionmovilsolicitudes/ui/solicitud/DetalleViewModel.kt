@@ -17,6 +17,9 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.example.gestionmovilsolicitudes.domain.ReglasEstado
+import com.example.gestionmovilsolicitudes.model.Perfil
+import com.example.gestionmovilsolicitudes.model.Prioridad
 
 class DetalleViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -41,14 +44,32 @@ class DetalleViewModel(app: Application) : AndroidViewModel(app) {
                 if (id == null || usuario == null) {
                     flowOf(DetalleUiState())
                 } else {
+                    // ---- NUEVO: declarar esAdmin y tecnicosFlow ----
+                    val esAdmin = usuario.perfil == Perfil.ADMINISTRADOR
+                    val tecnicosFlow =
+                        if (esAdmin) repo.observarTecnicos() else flowOf(emptyList())
+                    // ------------------------------------------------
+
                     combine(
                         repo.observarDetalle(id, usuario),
                         repo.observarHistorial(id),
-                        local
-                    ) { detalle, historial, l ->
+                        local,
+                        tecnicosFlow
+                    ) { detalle, historial, l, tecnicos ->
+                        val estadoActual = detalle?.solicitud?.estado
+                        val estadosDisponibles =
+                            if (esAdmin && estadoActual != null) {
+                                ReglasEstado.permitidos(Perfil.ADMINISTRADOR, estadoActual)
+                                    .filter { it != EstadoSolicitud.ASIGNADA }
+                                    .toList()
+                            } else emptyList()
+
                         DetalleUiState(
                             cargando = false,
                             perfil = usuario.perfil,
+                            esAdmin = esAdmin,
+                            tecnicos = tecnicos,
+                            estadosDisponibles = estadosDisponibles,
                             solicitud = detalle?.solicitud,
                             clienteNombre = detalle?.clienteNombre,
                             responsableNombre = detalle?.responsableNombre,
@@ -109,6 +130,33 @@ class DetalleViewModel(app: Application) : AndroidViewModel(app) {
             repo.cambiarEstado(id, EstadoSolicitud.EN_REVISION, usuario, respuesta.trim())
         }
     }
+    fun cambiarEstadoAdmin(nuevo: EstadoSolicitud) =
+        ejecutar("Estado actualizado") { usuario, id ->
+            repo.cambiarEstado(id, nuevo, usuario)
+        }
+
+    fun cancelarSolicitud(motivo: String) {
+        if (motivo.isBlank()) {
+            local.update { it.copy(mensaje = "Indica el motivo de la cancelación") }
+            return
+        }
+        ejecutar("Solicitud cancelada") { usuario, id ->
+            repo.cambiarEstado(id, EstadoSolicitud.CANCELADA, usuario, motivo.trim())
+        }
+    }
+    fun cambiarPrioridad(nueva: Prioridad) =
+        ejecutar("Prioridad actualizada") { usuario, id ->
+            repo.definirPrioridad(id, nueva, usuario)
+        }
+
+    fun asignarTecnico(tecnicoId: Long) =
+        ejecutar("Responsable actualizado") { usuario, id ->
+            repo.asignarResponsable(id, tecnicoId, usuario)
+        }
+
+
+
+
 
     // Ejecuta una acción del repositorio y publica el resultado como mensaje
     private fun ejecutar(

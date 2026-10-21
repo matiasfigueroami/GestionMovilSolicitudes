@@ -49,10 +49,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
+import com.example.gestionmovilsolicitudes.model.EstadoSolicitud
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import com.example.gestionmovilsolicitudes.model.Prioridad
 
-private enum class Dialogo { REABRIR, RESPONDER }
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 
-@OptIn(ExperimentalMaterial3Api::class)
+
+
+private enum class Dialogo { REABRIR, RESPONDER,CANCELAR }
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun DetalleSolicitudScreen(
     solicitudId: Long,
@@ -96,11 +106,17 @@ fun DetalleSolicitudScreen(
     ) { padding ->
         val s = state.solicitud
         when {
-            state.cargando -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            state.cargando -> Box(
+                Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
                 CircularProgressIndicator()
             }
 
-            s == null -> Box(Modifier.fillMaxSize().padding(padding).padding(24.dp), contentAlignment = Alignment.Center) {
+            s == null -> Box(
+                Modifier.fillMaxSize().padding(padding).padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
                 Text("No se encontró la solicitud o no tienes acceso a ella")
             }
 
@@ -112,7 +128,10 @@ fun DetalleSolicitudScreen(
                 // ---- Encabezado: título, estado vigente y prioridad ----
                 item {
                     Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(
+                            Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -140,12 +159,18 @@ fun DetalleSolicitudScreen(
                 // ---- Datos de la solicitud ----
                 item {
                     Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(
+                            Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Text("Datos", style = MaterialTheme.typography.titleMedium)
                             Fila("Categoría", s.categoria.etiqueta())
                             Fila("Servicio", s.servicioRelacionado ?: "—")
                             s.sitioOActivoRelacionado?.let { Fila("Sitio o activo", it) }
-                            if (state.perfil != Perfil.CLIENTE) Fila("Cliente", state.clienteNombre ?: "—")
+                            if (state.perfil != Perfil.CLIENTE) Fila(
+                                "Cliente",
+                                state.clienteNombre ?: "—"
+                            )
                             Fila("Responsable", state.responsableNombre ?: "Sin asignar")
                             Fila("Creada", formatearFechaHora(s.fechaCreacion))
                             s.fechaResolucion?.let { Fila("Resuelta", formatearFechaHora(it)) }
@@ -156,7 +181,10 @@ fun DetalleSolicitudScreen(
                 // ---- Descripción ----
                 item {
                     Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(
+                            Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Text("Descripción", style = MaterialTheme.typography.titleMedium)
                             Text(s.descripcion, style = MaterialTheme.typography.bodyMedium)
                         }
@@ -167,7 +195,10 @@ fun DetalleSolicitudScreen(
                 s.evidenciaUri?.let { uri ->
                     item {
                         Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(
+                                Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
                                 Text("Evidencia", style = MaterialTheme.typography.titleMedium)
                                 AsyncImage(
                                     model = uri,
@@ -183,12 +214,98 @@ fun DetalleSolicitudScreen(
                     }
                 }
 
+                // ---- Gestión (solo administrador) ----
+                if (state.esAdmin) {
+                    item {
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(
+                                Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text("Gestión", style = MaterialTheme.typography.titleMedium)
 
+                                // ---- Prioridad ----
+                                Text("Prioridad", style = MaterialTheme.typography.labelLarge)
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Prioridad.values().forEach { p ->
+                                        FilterChip(
+                                            selected = s.prioridad == p,
+                                            onClick = { vm.cambiarPrioridad(p) },
+                                            label = { Text(p.etiqueta()) },
+                                            enabled = !state.procesando
+                                        )
+                                    }
+                                }
+
+                                // ---- Responsable ----
+                                Text("Responsable", style = MaterialTheme.typography.labelLarge)
+                                var expandido by remember { mutableStateOf(false) }
+                                Box {
+                                    OutlinedButton(
+                                        onClick = { expandido = true },
+                                        enabled = !state.procesando,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(state.responsableNombre ?: "Asignar técnico")
+                                    }
+                                    DropdownMenu(
+                                        expanded = expandido,
+                                        onDismissRequest = { expandido = false }
+                                    ) {
+                                        state.tecnicos.forEach { t ->
+                                            DropdownMenuItem(
+                                                text = { Text(t.nombre) },
+                                                onClick = {
+                                                    vm.asignarTecnico(t.id)
+                                                    expandido = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // ---- Cambiar estado ----
+                                if (state.estadosDisponibles.isNotEmpty()) {
+                                    Text(
+                                        "Cambiar estado",
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        state.estadosDisponibles.forEach { estado ->
+                                            if (estado == EstadoSolicitud.CANCELADA) {
+                                                OutlinedButton(
+                                                    onClick = { dialogo = Dialogo.CANCELAR },
+                                                    enabled = !state.procesando
+                                                ) { Text(estado.etiqueta()) }
+                                            } else {
+                                                OutlinedButton(
+                                                    onClick = { vm.cambiarEstadoAdmin(estado) },
+                                                    enabled = !state.procesando
+                                                ) { Text(estado.etiqueta()) }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 // ---- Acciones del cliente según el estado ----
                 if (state.puedeResponder || state.puedeConfirmar || state.puedeReabrir) {
                     item {
                         Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(
+                                Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
                                 Text("Acciones", style = MaterialTheme.typography.titleMedium)
                                 if (state.puedeResponder) {
                                     Text("La empresa necesita más información para continuar.")
@@ -247,17 +364,29 @@ fun DetalleSolicitudScreen(
         }
     }
 
-    // ---- Diálogos de texto (reapertura / respuesta) ----
     dialogo?.let { d ->
-        DialogoTexto(
-            titulo = if (d == Dialogo.REABRIR) "Solicitar reapertura" else "Responder a la empresa",
-            etiqueta = if (d == Dialogo.REABRIR) "Motivo de la reapertura" else "Tu respuesta",
-            onConfirm = { texto ->
-                if (d == Dialogo.REABRIR) vm.reabrir(texto) else vm.responderInformacion(texto)
-                dialogo = null
-            },
-            onDismiss = { dialogo = null }
-        )
+        when (d) {
+            Dialogo.REABRIR -> DialogoTexto(
+                titulo = "Solicitar reapertura",
+                etiqueta = "Motivo de la reapertura",
+                onConfirm = { vm.reabrir(it); dialogo = null },
+                onDismiss = { dialogo = null }
+            )
+
+            Dialogo.RESPONDER -> DialogoTexto(
+                titulo = "Responder a la empresa",
+                etiqueta = "Tu respuesta",
+                onConfirm = { vm.responderInformacion(it); dialogo = null },
+                onDismiss = { dialogo = null }
+            )
+
+            Dialogo.CANCELAR -> DialogoTexto(
+                titulo = "Cancelar solicitud",
+                etiqueta = "Motivo de la cancelación",
+                onConfirm = { vm.cancelarSolicitud(it); dialogo = null },
+                onDismiss = { dialogo = null }
+            )
+        }
     }
 }
 

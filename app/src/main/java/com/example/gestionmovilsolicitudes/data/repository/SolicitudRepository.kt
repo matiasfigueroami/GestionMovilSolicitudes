@@ -16,11 +16,14 @@ import java.util.Calendar
 import com.example.gestionmovilsolicitudes.data.dao.EventoHistorial
 import com.example.gestionmovilsolicitudes.data.dao.SolicitudDetalle
 import kotlinx.coroutines.flow.map
+import com.example.gestionmovilsolicitudes.model.etiqueta
+import com.example.gestionmovilsolicitudes.model.etiqueta
 class SolicitudRepository(private val db: AppDatabase) {
 
     private val solicitudDao = db.solicitudDao()
     private val historialDao = db.historialDao()
     private val evidenciaDao = db.evidenciaDao()
+
 
     // ---------- Crear ----------
     suspend fun crear(
@@ -97,8 +100,8 @@ class SolicitudRepository(private val db: AppDatabase) {
             exigirAdmin(admin)
             val s = solicitudDao.obtenerPorId(solicitudId) ?: error("La solicitud no existe")
             solicitudDao.actualizar(s.copy(prioridad = prioridad, fechaActualizacion = System.currentTimeMillis()))
-            registrarHistorial(s.id, s.estado, s.estado, "Prioridad definida: $prioridad", null, admin)
-        }
+            registrarHistorial(s.id, s.estado, s.estado, "Prioridad definida: ${prioridad.etiqueta()}",
+                null, admin)        }
 
     suspend fun asignarResponsable(solicitudId: Long, tecnicoId: Long, admin: UsuarioEntity) =
         db.withTransaction {
@@ -107,7 +110,9 @@ class SolicitudRepository(private val db: AppDatabase) {
             val tecnico = db.usuarioDao().obtenerPorId(tecnicoId)
             check(tecnico != null && tecnico.perfil == Perfil.TECNICO) { "Responsable inválido" }
 
-            val nuevoEstado = if (s.estado == EstadoSolicitud.EN_REVISION) EstadoSolicitud.ASIGNADA else s.estado
+            val nuevoEstado = if (s.estado == EstadoSolicitud.RECIBIDA || s.estado == EstadoSolicitud.EN_REVISION)
+                EstadoSolicitud.ASIGNADA
+            else s.estado
             solicitudDao.actualizar(
                 s.copy(responsableId = tecnicoId, estado = nuevoEstado, fechaActualizacion = System.currentTimeMillis())
             )
@@ -153,7 +158,8 @@ class SolicitudRepository(private val db: AppDatabase) {
             Perfil.ADMINISTRADOR -> solicitudDao.filtrar()
             Perfil.TECNICO -> solicitudDao.observarPorResponsable(usuario.id)
         }
-
+    fun observarTecnicos(): Flow<List<UsuarioEntity>> =
+        db.usuarioDao().observarPorPerfil(Perfil.TECNICO)
     /** Detalle de una solicitud; emite null si no existe o el usuario no tiene acceso. */
     fun observarDetalle(id: Long, usuario: UsuarioEntity): Flow<SolicitudDetalle?> =
         solicitudDao.observarDetalle(id).map { d -> d?.takeIf { tieneAcceso(it.solicitud, usuario) } }

@@ -7,7 +7,7 @@ import com.example.gestionmovilsolicitudes.model.Perfil
 object ReglasEstado {
 
     private val admin = mapOf(
-        RECIBIDA to setOf(EN_REVISION, CANCELADA),
+        RECIBIDA to setOf(EN_REVISION, ASIGNADA, CANCELADA),
         EN_REVISION to setOf(PENDIENTE_INFORMACION, ASIGNADA, CANCELADA),
         PENDIENTE_INFORMACION to setOf(EN_REVISION, CANCELADA),
         ASIGNADA to setOf(EN_PROCESO, PENDIENTE_INFORMACION, CANCELADA),
