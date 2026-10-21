@@ -10,16 +10,20 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.gestionmovilsolicitudes.session.SessionManager
+import com.example.gestionmovilsolicitudes.ui.admin.AdminPanelScreen
 import com.example.gestionmovilsolicitudes.ui.login.LoginScreen
 import com.example.gestionmovilsolicitudes.ui.menu.MenuScreen
 import com.example.gestionmovilsolicitudes.ui.solicitud.DetalleSolicitudScreen
 import com.example.gestionmovilsolicitudes.ui.solicitud.ListaSolicitudesScreen
 import com.example.gestionmovilsolicitudes.ui.solicitud.SolicitudFormScreen
+
 object Rutas {
     const val LOGIN = "login"
     const val MENU = "menu"
     const val LISTA = "lista"
+    const val ADMIN = "admin"
     const val FORM = "form?id={id}"
+
     fun form(id: Long? = null) = if (id == null) "form" else "form?id=$id"
 
     const val DETALLE = "detalle/{id}"
@@ -47,10 +51,17 @@ fun AppNavigation() {
         composable(Rutas.MENU) {
             MenuScreen(
                 onSolicitudes = { nav.navigate(Rutas.LISTA) },
+                onPanelAdmin = { nav.navigate(Rutas.ADMIN) },
                 onCerrarSesion = { SessionManager.cerrar() }
             )
         }
 
+        composable(Rutas.ADMIN) {
+            AdminPanelScreen(
+                onAbrir = { id -> nav.navigate(Rutas.detalle(id)) },
+                onVolver = { nav.popBackStack() }
+            )
+        }
 
         composable(Rutas.LISTA) {
             ListaSolicitudesScreen(

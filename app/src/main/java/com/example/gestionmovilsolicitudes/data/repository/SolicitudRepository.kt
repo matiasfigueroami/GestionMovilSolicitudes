@@ -158,6 +158,29 @@ class SolicitudRepository(private val db: AppDatabase) {
             Perfil.ADMINISTRADOR -> solicitudDao.filtrar()
             Perfil.TECNICO -> solicitudDao.observarPorResponsable(usuario.id)
         }
+    // ---------- Panel del administrador (todas exigen perfil administrador) ----------
+
+    fun filtrar(
+        admin: UsuarioEntity,
+        estado: EstadoSolicitud?,
+        prioridad: Prioridad?,
+        clienteId: Long?,
+        responsableId: Long?,
+        texto: String?
+    ): Flow<List<SolicitudEntity>> {
+        exigirAdmin(admin)
+        return solicitudDao.filtrar(estado, prioridad, clienteId, responsableId, texto)
+    }
+
+    fun observarAtrasadas(admin: UsuarioEntity, limite: Long): Flow<List<SolicitudEntity>> {
+        exigirAdmin(admin)
+        return solicitudDao.observarAtrasadas(limite)
+    }
+
+    fun conteoPorEstado(admin: UsuarioEntity) = run { exigirAdmin(admin); solicitudDao.conteoPorEstado() }
+    fun conteoPorPrioridad(admin: UsuarioEntity) = run { exigirAdmin(admin); solicitudDao.conteoPorPrioridad() }
+    fun conteoPorResponsable(admin: UsuarioEntity) = run { exigirAdmin(admin); solicitudDao.conteoPorResponsable() }
+    fun observarClientes(admin: UsuarioEntity) = run { exigirAdmin(admin); db.clienteDao().observarTodos() }
     fun observarTecnicos(): Flow<List<UsuarioEntity>> =
         db.usuarioDao().observarPorPerfil(Perfil.TECNICO)
     /** Detalle de una solicitud; emite null si no existe o el usuario no tiene acceso. */

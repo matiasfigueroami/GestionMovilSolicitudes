@@ -17,10 +17,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.gestionmovilsolicitudes.model.Perfil
 import com.example.gestionmovilsolicitudes.session.SessionManager
 
 @Composable
-fun MenuScreen(onSolicitudes: () -> Unit, onCerrarSesion: () -> Unit) {
+fun MenuScreen(onSolicitudes: () -> Unit, onPanelAdmin: () -> Unit, onCerrarSesion: () -> Unit)  {
     val usuario by SessionManager.usuario.collectAsState()
     val perfil = usuario?.perfil?.name?.lowercase()?.replaceFirstChar { it.uppercase() }.orEmpty()
 
@@ -30,6 +31,14 @@ fun MenuScreen(onSolicitudes: () -> Unit, onCerrarSesion: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("Menú principal", style = MaterialTheme.typography.headlineMedium)
+
+        if (usuario?.perfil == Perfil.ADMINISTRADOR) {
+            Spacer(Modifier.height(12.dp))
+            Button(onClick = onPanelAdmin, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                Text("Panel del administrador")
+            }
+        }
+
         Spacer(Modifier.height(8.dp))
         Text("Hola, ${usuario?.nombre.orEmpty()}", style = MaterialTheme.typography.titleMedium)
         Text("Perfil: $perfil", style = MaterialTheme.typography.bodyMedium)
