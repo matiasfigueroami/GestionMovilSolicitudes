@@ -5,7 +5,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gestionmovilsolicitudes.GestionApp
 import com.example.gestionmovilsolicitudes.data.entity.UsuarioEntity
+import com.example.gestionmovilsolicitudes.domain.ReglasEstado
 import com.example.gestionmovilsolicitudes.model.EstadoSolicitud
+import com.example.gestionmovilsolicitudes.model.Perfil
+import com.example.gestionmovilsolicitudes.model.Prioridad
 import com.example.gestionmovilsolicitudes.session.SessionManager
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,9 +20,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import com.example.gestionmovilsolicitudes.domain.ReglasEstado
-import com.example.gestionmovilsolicitudes.model.Perfil
-import com.example.gestionmovilsolicitudes.model.Prioridad
 
 class DetalleViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -44,11 +44,9 @@ class DetalleViewModel(app: Application) : AndroidViewModel(app) {
                 if (id == null || usuario == null) {
                     flowOf(DetalleUiState())
                 } else {
-                    // ---- NUEVO: declarar esAdmin y tecnicosFlow ----
                     val esAdmin = usuario.perfil == Perfil.ADMINISTRADOR
                     val tecnicosFlow =
                         if (esAdmin) repo.observarTecnicos() else flowOf(emptyList())
-                    // ------------------------------------------------
 
                     combine(
                         repo.observarDetalle(id, usuario),
@@ -108,7 +106,11 @@ class DetalleViewModel(app: Application) : AndroidViewModel(app) {
 
     fun confirmarResolucion() =
         ejecutar("Gracias por confirmar. La solicitud quedó cerrada.") { usuario, id ->
-            repo.cambiarEstado(id, EstadoSolicitud.CERRADA, usuario, "El cliente confirmó la resolución")
+            repo.cambiarEstado(
+                id, EstadoSolicitud.CERRADA, usuario,
+                comentario = "El cliente confirmó la resolución",
+                accion = "Resolución confirmada por el cliente"
+            )
         }
 
     fun reabrir(motivo: String) {
@@ -117,7 +119,10 @@ class DetalleViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         ejecutar("Solicitud reabierta") { usuario, id ->
-            repo.cambiarEstado(id, EstadoSolicitud.EN_PROCESO, usuario, motivo.trim())
+            repo.cambiarEstado(
+                id, EstadoSolicitud.EN_PROCESO, usuario, motivo.trim(),
+                accion = "Reapertura solicitada"
+            )
         }
     }
 
@@ -127,9 +132,13 @@ class DetalleViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         ejecutar("Respuesta enviada") { usuario, id ->
-            repo.cambiarEstado(id, EstadoSolicitud.EN_REVISION, usuario, respuesta.trim())
+            repo.cambiarEstado(
+                id, EstadoSolicitud.EN_REVISION, usuario, respuesta.trim(),
+                accion = "Respuesta del cliente"
+            )
         }
     }
+
     fun cambiarEstadoAdmin(nuevo: EstadoSolicitud) =
         ejecutar("Estado actualizado") { usuario, id ->
             repo.cambiarEstado(id, nuevo, usuario)
@@ -141,9 +150,13 @@ class DetalleViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         ejecutar("Solicitud cancelada") { usuario, id ->
-            repo.cambiarEstado(id, EstadoSolicitud.CANCELADA, usuario, motivo.trim())
+            repo.cambiarEstado(
+                id, EstadoSolicitud.CANCELADA, usuario, motivo.trim(),
+                accion = "Solicitud cancelada"
+            )
         }
     }
+
     fun cambiarPrioridad(nueva: Prioridad) =
         ejecutar("Prioridad actualizada") { usuario, id ->
             repo.definirPrioridad(id, nueva, usuario)
@@ -154,9 +167,50 @@ class DetalleViewModel(app: Application) : AndroidViewModel(app) {
             repo.asignarResponsable(id, tecnicoId, usuario)
         }
 
+    // ---------- Acciones del técnico ----------
 
+    fun iniciarTrabajo() =
+        ejecutar("Trabajo iniciado") { usuario, id ->
+            repo.cambiarEstado(
+                id, EstadoSolicitud.EN_PROCESO, usuario,
+                comentario = "El técnico inició el trabajo",
+                accion = "Trabajo iniciado"
+            )
+        }
 
+    fun registrarAvance(texto: String) {
+        if (texto.isBlank()) {
+            local.update { it.copy(mensaje = "Describe el avance realizado") }
+            return
+        }
+        ejecutar("Avance registrado") { usuario, id -> repo.registrarAvance(id, texto, usuario) }
+    }
 
+    fun solicitarInformacion(texto: String) {
+        if (texto.isBlank()) {
+            local.update { it.copy(mensaje = "Indica qué información necesitas del cliente") }
+            return
+        }
+        ejecutar("Se solicitó información al cliente") { usuario, id ->
+            repo.cambiarEstado(
+                id, EstadoSolicitud.PENDIENTE_INFORMACION, usuario, texto.trim(),
+                accion = "Información solicitada al cliente"
+            )
+        }
+    }
+
+    fun registrarSolucion(texto: String) {
+        if (texto.isBlank()) {
+            local.update { it.copy(mensaje = "Describe la solución aplicada") }
+            return
+        }
+        ejecutar("Solución registrada. La solicitud quedó resuelta.") { usuario, id ->
+            repo.cambiarEstado(
+                id, EstadoSolicitud.RESUELTA, usuario, texto.trim(),
+                accion = "Solución registrada"
+            )
+        }
+    }
 
     // Ejecuta una acción del repositorio y publica el resultado como mensaje
     private fun ejecutar(

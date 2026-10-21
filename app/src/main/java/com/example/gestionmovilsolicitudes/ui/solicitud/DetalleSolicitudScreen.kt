@@ -3,10 +3,13 @@ package com.example.gestionmovilsolicitudes.ui.solicitud
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,7 +20,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,29 +44,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.gestionmovilsolicitudes.data.dao.EventoHistorial
-import com.example.gestionmovilsolicitudes.model.Perfil
-import com.example.gestionmovilsolicitudes.model.etiqueta
-
-import androidx.compose.foundation.layout.height
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
+import com.example.gestionmovilsolicitudes.data.dao.EventoHistorial
 import com.example.gestionmovilsolicitudes.model.EstadoSolicitud
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
+import com.example.gestionmovilsolicitudes.model.Perfil
 import com.example.gestionmovilsolicitudes.model.Prioridad
-
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-
-
-
-private enum class Dialogo { REABRIR, RESPONDER,CANCELAR }
+import com.example.gestionmovilsolicitudes.model.etiqueta
+import androidx.compose.ui.platform.LocalContext
+import com.example.gestionmovilsolicitudes.domain.MensajeSeguimiento
+private enum class Dialogo { REABRIR, RESPONDER, CANCELAR, AVANCE, PEDIR_INFO, SOLUCION }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -73,7 +70,7 @@ fun DetalleSolicitudScreen(
     val state by vm.uiState.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var dialogo by remember { mutableStateOf<Dialogo?>(null) }
-
+    val context = LocalContext.current
     LaunchedEffect(solicitudId) { vm.cargar(solicitudId) }
 
     // Muestra cada mensaje del ViewModel una sola vez
@@ -152,6 +149,16 @@ fun DetalleSolicitudScreen(
                                 "Última actualización: ${formatearFechaHora(s.fechaActualizacion)}",
                                 style = MaterialTheme.typography.bodySmall
                             )
+                            OutlinedButton(
+                                onClick = {
+                                    compartirTexto(
+                                        context,
+                                        "Solicitud ${s.codigoSeguimiento}",
+                                        MensajeSeguimiento.construir(s)
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Compartir referencia") }
                         }
                     }
                 }
@@ -298,6 +305,49 @@ fun DetalleSolicitudScreen(
                         }
                     }
                 }
+
+                // ---- Trabajo del técnico ----
+                if (state.tieneAccionesTecnico) {
+                    item {
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(
+                                Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text("Trabajo técnico", style = MaterialTheme.typography.titleMedium)
+                                if (state.puedeIniciar) {
+                                    Button(
+                                        onClick = vm::iniciarTrabajo,
+                                        enabled = !state.procesando,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) { Text("Iniciar trabajo") }
+                                }
+                                if (state.puedeRegistrarAvance) {
+                                    OutlinedButton(
+                                        onClick = { dialogo = Dialogo.AVANCE },
+                                        enabled = !state.procesando,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) { Text("Registrar avance") }
+                                }
+                                if (state.puedePedirInformacion) {
+                                    OutlinedButton(
+                                        onClick = { dialogo = Dialogo.PEDIR_INFO },
+                                        enabled = !state.procesando,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) { Text("Pedir información al cliente") }
+                                }
+                                if (state.puedeResolver) {
+                                    Button(
+                                        onClick = { dialogo = Dialogo.SOLUCION },
+                                        enabled = !state.procesando,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) { Text("Registrar solución y resolver") }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // ---- Acciones del cliente según el estado ----
                 if (state.puedeResponder || state.puedeConfirmar || state.puedeReabrir) {
                     item {
@@ -309,6 +359,7 @@ fun DetalleSolicitudScreen(
                                 Text("Acciones", style = MaterialTheme.typography.titleMedium)
                                 if (state.puedeResponder) {
                                     Text("La empresa necesita más información para continuar.")
+                                    state.ultimaConsulta?.let { Cita("Consulta de la empresa", it) }
                                     Button(
                                         onClick = { dialogo = Dialogo.RESPONDER },
                                         enabled = !state.procesando,
@@ -317,6 +368,7 @@ fun DetalleSolicitudScreen(
                                 }
                                 if (state.puedeConfirmar) {
                                     Text("La empresa registró una solución. Confirma si estás conforme.")
+                                    state.ultimaSolucion?.let { Cita("Solución propuesta", it) }
                                     Button(
                                         onClick = vm::confirmarResolucion,
                                         enabled = !state.procesando,
@@ -386,7 +438,36 @@ fun DetalleSolicitudScreen(
                 onConfirm = { vm.cancelarSolicitud(it); dialogo = null },
                 onDismiss = { dialogo = null }
             )
+
+            Dialogo.AVANCE -> DialogoTexto(
+                titulo = "Registrar avance",
+                etiqueta = "¿Qué avanzaste?",
+                onConfirm = { vm.registrarAvance(it); dialogo = null },
+                onDismiss = { dialogo = null }
+            )
+
+            Dialogo.PEDIR_INFO -> DialogoTexto(
+                titulo = "Pedir información al cliente",
+                etiqueta = "¿Qué necesitas saber?",
+                onConfirm = { vm.solicitarInformacion(it); dialogo = null },
+                onDismiss = { dialogo = null }
+            )
+
+            Dialogo.SOLUCION -> DialogoTexto(
+                titulo = "Registrar solución",
+                etiqueta = "Describe la solución aplicada",
+                onConfirm = { vm.registrarSolucion(it); dialogo = null },
+                onDismiss = { dialogo = null }
+            )
         }
+    }
+}
+
+@Composable
+private fun Cita(titulo: String, texto: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(titulo, style = MaterialTheme.typography.labelLarge)
+        Text("\"$texto\"", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic)
     }
 }
 

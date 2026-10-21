@@ -16,12 +16,14 @@ import com.example.gestionmovilsolicitudes.ui.menu.MenuScreen
 import com.example.gestionmovilsolicitudes.ui.solicitud.DetalleSolicitudScreen
 import com.example.gestionmovilsolicitudes.ui.solicitud.ListaSolicitudesScreen
 import com.example.gestionmovilsolicitudes.ui.solicitud.SolicitudFormScreen
+import com.example.gestionmovilsolicitudes.ui.tecnico.TecnicoPanelScreen
 
 object Rutas {
     const val LOGIN = "login"
     const val MENU = "menu"
     const val LISTA = "lista"
     const val ADMIN = "admin"
+    const val TECNICO = "tecnico"
     const val FORM = "form?id={id}"
 
     fun form(id: Long? = null) = if (id == null) "form" else "form?id=$id"
@@ -52,7 +54,15 @@ fun AppNavigation() {
             MenuScreen(
                 onSolicitudes = { nav.navigate(Rutas.LISTA) },
                 onPanelAdmin = { nav.navigate(Rutas.ADMIN) },
+                onPanelTecnico = { nav.navigate(Rutas.TECNICO) },
                 onCerrarSesion = { SessionManager.cerrar() }
+            )
+        }
+
+        composable(Rutas.TECNICO) {
+            TecnicoPanelScreen(
+                onAbrir = { id -> nav.navigate(Rutas.detalle(id)) },
+                onVolver = { nav.popBackStack() }
             )
         }
 

@@ -2,6 +2,9 @@ package com.example.gestionmovilsolicitudes.data.repository
 
 import androidx.room.withTransaction
 import com.example.gestionmovilsolicitudes.data.AppDatabase
+import com.example.gestionmovilsolicitudes.data.dao.ActividadReciente
+import com.example.gestionmovilsolicitudes.data.dao.EventoHistorial
+import com.example.gestionmovilsolicitudes.data.dao.SolicitudDetalle
 import com.example.gestionmovilsolicitudes.data.entity.EvidenciaEntity
 import com.example.gestionmovilsolicitudes.data.entity.HistorialEntity
 import com.example.gestionmovilsolicitudes.data.entity.SolicitudEntity
@@ -11,19 +14,16 @@ import com.example.gestionmovilsolicitudes.model.Categoria
 import com.example.gestionmovilsolicitudes.model.EstadoSolicitud
 import com.example.gestionmovilsolicitudes.model.Perfil
 import com.example.gestionmovilsolicitudes.model.Prioridad
-import kotlinx.coroutines.flow.Flow          // ← NUEVO
-import java.util.Calendar
-import com.example.gestionmovilsolicitudes.data.dao.EventoHistorial
-import com.example.gestionmovilsolicitudes.data.dao.SolicitudDetalle
+import com.example.gestionmovilsolicitudes.model.etiqueta
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import com.example.gestionmovilsolicitudes.model.etiqueta
-import com.example.gestionmovilsolicitudes.model.etiqueta
+import java.util.Calendar
+
 class SolicitudRepository(private val db: AppDatabase) {
 
     private val solicitudDao = db.solicitudDao()
     private val historialDao = db.historialDao()
     private val evidenciaDao = db.evidenciaDao()
-
 
     // ---------- Crear ----------
     suspend fun crear(
@@ -33,7 +33,7 @@ class SolicitudRepository(private val db: AppDatabase) {
         categoria: Categoria,
         servicio: String? = null,
         sitio: String? = null,
-        evidenciaUri: String? = null        // ← NUEVO
+        evidenciaUri: String? = null
     ): Long = db.withTransaction {
         require(usuario.perfil == Perfil.CLIENTE && usuario.clienteId != null) {
             "Solo un cliente puede crear solicitudes"
@@ -50,7 +50,7 @@ class SolicitudRepository(private val db: AppDatabase) {
                 categoria = categoria,
                 servicioRelacionado = servicio,
                 sitioOActivoRelacionado = sitio,
-                evidenciaUri = evidenciaUri    // ← NUEVO
+                evidenciaUri = evidenciaUri
             )
         )
         registrarHistorial(id, null, EstadoSolicitud.RECIBIDA, "Solicitud creada", null, usuario)
@@ -68,7 +68,8 @@ class SolicitudRepository(private val db: AppDatabase) {
         solicitudId: Long,
         nuevo: EstadoSolicitud,
         usuario: UsuarioEntity,
-        comentario: String? = null
+        comentario: String? = null,
+        accion: String? = null
     ) = db.withTransaction {
         val s = solicitudDao.obtenerPorId(solicitudId) ?: error("La solicitud no existe")
         verificarAcceso(s, usuario)
@@ -90,7 +91,7 @@ class SolicitudRepository(private val db: AppDatabase) {
                 motivoCancelacion = if (nuevo == EstadoSolicitud.CANCELADA) comentario else s.motivoCancelacion
             )
         )
-        registrarHistorial(s.id, s.estado, nuevo, "Cambio de estado a $nuevo", comentario, usuario)
+        registrarHistorial(s.id, s.estado, nuevo, accion ?: "Cambio de estado a ${nuevo.etiqueta()}", comentario, usuario)
     }
 
     // ---------- Acciones del administrador ----------
@@ -100,8 +101,8 @@ class SolicitudRepository(private val db: AppDatabase) {
             exigirAdmin(admin)
             val s = solicitudDao.obtenerPorId(solicitudId) ?: error("La solicitud no existe")
             solicitudDao.actualizar(s.copy(prioridad = prioridad, fechaActualizacion = System.currentTimeMillis()))
-            registrarHistorial(s.id, s.estado, s.estado, "Prioridad definida: ${prioridad.etiqueta()}",
-                null, admin)        }
+            registrarHistorial(s.id, s.estado, s.estado, "Prioridad definida: ${prioridad.etiqueta()}", null, admin)
+        }
 
     suspend fun asignarResponsable(solicitudId: Long, tecnicoId: Long, admin: UsuarioEntity) =
         db.withTransaction {
@@ -118,6 +119,23 @@ class SolicitudRepository(private val db: AppDatabase) {
             )
             registrarHistorial(s.id, s.estado, nuevoEstado, "Asignada a ${tecnico.nombre}", null, admin)
         }
+
+    // ---------- Acciones del técnico ----------
+
+    suspend fun registrarAvance(solicitudId: Long, texto: String, tecnico: UsuarioEntity) =
+        db.withTransaction {
+            check(tecnico.perfil == Perfil.TECNICO) { "Solo el técnico responsable puede registrar avances" }
+            require(texto.isNotBlank()) { "Describe el avance realizado" }
+            val s = solicitudDao.obtenerPorId(solicitudId) ?: error("La solicitud no existe")
+            verificarAcceso(s, tecnico)
+            check(s.estado == EstadoSolicitud.EN_PROCESO) { "Solo se registran avances en solicitudes en proceso" }
+            solicitudDao.actualizar(s.copy(fechaActualizacion = System.currentTimeMillis()))
+            registrarHistorial(s.id, s.estado, s.estado, "Avance registrado", texto.trim(), tecnico)
+        }
+
+    /** Acciones más recientes realizadas por el usuario (historial de sus acciones). */
+    fun observarActividad(usuario: UsuarioEntity): Flow<List<ActividadReciente>> =
+        historialDao.observarActividadDeUsuario(usuario.id, 15)
 
     // ---------- Comentarios y evidencias ----------
 
@@ -149,7 +167,7 @@ class SolicitudRepository(private val db: AppDatabase) {
         registrarHistorial(s.id, s.estado, s.estado, "Evidencia adjuntada: $nombre", null, usuario, evidenciaId)
     }
 
-    // ---------- Consultas / edición ----------   ← NUEVO BLOQUE
+    // ---------- Consultas / edición ----------
 
     /** Qué solicitudes ve cada perfil */
     fun observarVisibles(usuario: UsuarioEntity): Flow<List<SolicitudEntity>> =
@@ -158,6 +176,7 @@ class SolicitudRepository(private val db: AppDatabase) {
             Perfil.ADMINISTRADOR -> solicitudDao.filtrar()
             Perfil.TECNICO -> solicitudDao.observarPorResponsable(usuario.id)
         }
+
     // ---------- Panel del administrador (todas exigen perfil administrador) ----------
 
     fun filtrar(
@@ -183,13 +202,13 @@ class SolicitudRepository(private val db: AppDatabase) {
     fun observarClientes(admin: UsuarioEntity) = run { exigirAdmin(admin); db.clienteDao().observarTodos() }
     fun observarTecnicos(): Flow<List<UsuarioEntity>> =
         db.usuarioDao().observarPorPerfil(Perfil.TECNICO)
+
     /** Detalle de una solicitud; emite null si no existe o el usuario no tiene acceso. */
     fun observarDetalle(id: Long, usuario: UsuarioEntity): Flow<SolicitudDetalle?> =
         solicitudDao.observarDetalle(id).map { d -> d?.takeIf { tieneAcceso(it.solicitud, usuario) } }
 
     fun observarHistorial(id: Long): Flow<List<EventoHistorial>> =
         historialDao.observarDetallado(id)
-
 
     suspend fun obtener(id: Long, usuario: UsuarioEntity): SolicitudEntity {
         val s = solicitudDao.obtenerPorId(id) ?: error("La solicitud no existe")

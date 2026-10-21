@@ -23,6 +23,16 @@ data class SolicitudDetalle(
     val responsableNombre: String?
 )
 
+/** Acción reciente de un usuario, con el código y título de la solicitud. */
+data class ActividadReciente(
+    val id: Long,
+    val codigo: String,
+    val titulo: String,
+    val accion: String,
+    val comentario: String?,
+    val estadoNuevo: EstadoSolicitud,
+    val fechaHora: Long
+)
 /** Evento del historial con el nombre del usuario que lo realizó. */
 data class EventoHistorial(
     val id: Long,
@@ -162,7 +172,19 @@ interface HistorialDao {
     """
     )
     fun observarDetallado(solicitudId: Long): Flow<List<EventoHistorial>>
-
+    @Query(
+        """
+    SELECT h.id AS id, s.codigoSeguimiento AS codigo, s.titulo AS titulo,
+           h.accionRealizada AS accion, h.comentario AS comentario,
+           h.estadoNuevo AS estadoNuevo, h.fechaHora AS fechaHora
+    FROM historial h
+    INNER JOIN solicitudes s ON s.id = h.solicitudId
+    WHERE h.usuarioResponsableId = :usuarioId
+    ORDER BY h.fechaHora DESC, h.id DESC
+    LIMIT :limite
+    """
+    )
+    fun observarActividadDeUsuario(usuarioId: Long, limite: Int): Flow<List<ActividadReciente>>
 }
 
 @Dao

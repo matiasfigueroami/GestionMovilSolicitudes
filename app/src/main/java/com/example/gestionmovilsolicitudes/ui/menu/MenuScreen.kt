@@ -21,8 +21,12 @@ import com.example.gestionmovilsolicitudes.model.Perfil
 import com.example.gestionmovilsolicitudes.session.SessionManager
 
 @Composable
-fun MenuScreen(onSolicitudes: () -> Unit, onPanelAdmin: () -> Unit, onCerrarSesion: () -> Unit)  {
-    val usuario by SessionManager.usuario.collectAsState()
+fun MenuScreen(
+    onSolicitudes: () -> Unit,
+    onPanelAdmin: () -> Unit,
+    onPanelTecnico: () -> Unit,
+    onCerrarSesion: () -> Unit
+) {    val usuario by SessionManager.usuario.collectAsState()
     val perfil = usuario?.perfil?.name?.lowercase()?.replaceFirstChar { it.uppercase() }.orEmpty()
 
     Column(
@@ -36,6 +40,12 @@ fun MenuScreen(onSolicitudes: () -> Unit, onPanelAdmin: () -> Unit, onCerrarSesi
             Spacer(Modifier.height(12.dp))
             Button(onClick = onPanelAdmin, modifier = Modifier.fillMaxWidth().height(52.dp)) {
                 Text("Panel del administrador")
+            }
+        }
+        if (usuario?.perfil == Perfil.TECNICO) {
+            Spacer(Modifier.height(12.dp))
+            Button(onClick = onPanelTecnico, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                Text("Panel del técnico")
             }
         }
 
