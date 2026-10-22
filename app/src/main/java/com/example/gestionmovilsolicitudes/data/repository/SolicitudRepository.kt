@@ -223,6 +223,7 @@ class SolicitudRepository(private val db: AppDatabase) {
         descripcion: String,
         categoria: Categoria,
         servicio: String?,
+        sitio: String?,
         evidenciaUri: String?
     ) = db.withTransaction {
         check(usuario.perfil != Perfil.TECNICO) { "El técnico no puede editar los datos de la solicitud" }
@@ -237,6 +238,7 @@ class SolicitudRepository(private val db: AppDatabase) {
                 descripcion = descripcion.trim(),
                 categoria = categoria,
                 servicioRelacionado = servicio?.trim()?.ifBlank { null },
+                sitioOActivoRelacionado = sitio?.trim()?.ifBlank { null },
                 evidenciaUri = evidenciaUri,
                 fechaActualizacion = System.currentTimeMillis()
             )

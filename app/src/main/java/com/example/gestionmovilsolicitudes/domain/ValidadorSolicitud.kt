@@ -6,6 +6,7 @@ object ValidadorSolicitud {
 
     const val TITULO_MAX = 80
     const val DESCRIPCION_MIN = 10
+    const val SITIO_MAX = 100
 
     // Categorías en las que el servicio relacionado es obligatorio
     private val conServicio = setOf(
@@ -17,12 +18,20 @@ object ValidadorSolicitud {
         val titulo: String?,
         val descripcion: String?,
         val categoria: String?,
-        val servicio: String?
+        val servicio: String?,
+        val sitio: String? = null
     ) {
-        val valido: Boolean get() = titulo == null && descripcion == null && categoria == null && servicio == null
+        val valido: Boolean
+            get() = titulo == null && descripcion == null && categoria == null && servicio == null && sitio == null
     }
 
-    fun validar(titulo: String, descripcion: String, categoria: String, servicio: String): Resultado {
+    fun validar(
+        titulo: String,
+        descripcion: String,
+        categoria: String,
+        servicio: String,
+        sitio: String = ""
+    ): Resultado {
         val cat = Categoria.entries.firstOrNull { it.name == categoria }
         return Resultado(
             titulo = when {
@@ -37,7 +46,8 @@ object ValidadorSolicitud {
             },
             categoria = if (cat == null) "Selecciona una categoría" else null,
             servicio = if (cat != null && cat in conServicio && servicio.isBlank())
-                "Indica el servicio relacionado" else null
+                "Indica el servicio relacionado" else null,
+            sitio = if (sitio.trim().length > SITIO_MAX) "Máximo $SITIO_MAX caracteres" else null
         )
     }
 }

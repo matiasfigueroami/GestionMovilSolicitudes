@@ -15,6 +15,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -47,6 +49,7 @@ import com.example.gestionmovilsolicitudes.domain.ReglasAtraso
 import com.example.gestionmovilsolicitudes.model.EstadoSolicitud
 import com.example.gestionmovilsolicitudes.model.Prioridad
 import com.example.gestionmovilsolicitudes.model.etiqueta
+import com.example.gestionmovilsolicitudes.ui.componentes.CampoFormulario
 import com.example.gestionmovilsolicitudes.ui.componentes.ContadorAnimado
 import com.example.gestionmovilsolicitudes.ui.solicitud.EstadoChip
 
@@ -161,12 +164,17 @@ fun AdminPanelScreen(
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Filtros", style = MaterialTheme.typography.titleMedium)
-                            OutlinedTextField(
+                            CampoFormulario(
                                 value = state.texto,
                                 onValueChange = vm::onTexto,
-                                label = { Text("Buscar por código o título") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
+                                label = "Buscar por código o título",
+                                icono = Icons.Default.Search,
+                                error = null,
+                                trailing = if (state.texto.isNotBlank()) ({
+                                    IconButton(onClick = { vm.onTexto("") }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Borrar búsqueda")
+                                    }
+                                }) else null
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 FiltroDropdown(

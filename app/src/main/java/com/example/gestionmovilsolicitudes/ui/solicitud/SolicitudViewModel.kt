@@ -1,4 +1,5 @@
 package com.example.gestionmovilsolicitudes.ui.solicitud
+
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -37,6 +38,7 @@ class SolicitudViewModel(app: Application) : AndroidViewModel(app) {
     fun onDescripcionChange(v: String) = _uiState.update { it.copy(descripcion = v, descripcionError = null) }
     fun onCategoriaChange(v: String) = _uiState.update { it.copy(categoria = v, categoriaError = null, servicioError = null) }
     fun onServicioChange(v: String) = _uiState.update { it.copy(servicio = v, servicioError = null) }
+    fun onSitioChange(v: String) = _uiState.update { it.copy(sitio = v, sitioError = null) }
     fun onEvidenciaChange(uri: String?) = _uiState.update { it.copy(evidenciaUri = uri) }
 
     fun limpiarFormulario() { _uiState.value = SolicitudUiState() }
@@ -54,6 +56,7 @@ class SolicitudViewModel(app: Application) : AndroidViewModel(app) {
                         descripcion = s.descripcion,
                         categoria = s.categoria.name,
                         servicio = s.servicioRelacionado.orEmpty(),
+                        sitio = s.sitioOActivoRelacionado.orEmpty(),
                         evidenciaUri = s.evidenciaUri
                     )
                 }
@@ -69,12 +72,15 @@ class SolicitudViewModel(app: Application) : AndroidViewModel(app) {
         if (st.guardando) return
 
         // 1. Validar: los errores se publican en el estado y la pantalla solo los muestra
-        val r = ValidadorSolicitud.validar(st.titulo, st.descripcion, st.categoria, st.servicio)
+        val r = ValidadorSolicitud.validar(st.titulo, st.descripcion, st.categoria, st.servicio, st.sitio)
         if (!r.valido) {
             _uiState.update {
                 it.copy(
-                    tituloError = r.titulo, descripcionError = r.descripcion,
-                    categoriaError = r.categoria, servicioError = r.servicio
+                    tituloError = r.titulo,
+                    descripcionError = r.descripcion,
+                    categoriaError = r.categoria,
+                    servicioError = r.servicio,
+                    sitioError = r.sitio
                 )
             }
             return
@@ -85,10 +91,11 @@ class SolicitudViewModel(app: Application) : AndroidViewModel(app) {
             _uiState.update { it.copy(guardando = true, mensajeError = null) }
             try {
                 val categoria = Categoria.valueOf(st.categoria)
+                val sitioParam = st.sitio.ifBlank { null }
                 if (st.editandoId == null) {
-                    repo.crear(usuario, st.titulo, st.descripcion, categoria, st.servicio.ifBlank { null }, null, st.evidenciaUri)
+                    repo.crear(usuario, st.titulo, st.descripcion, categoria, st.servicio.ifBlank { null }, sitioParam, st.evidenciaUri)
                 } else {
-                    repo.editar(st.editandoId, usuario, st.titulo, st.descripcion, categoria, st.servicio, st.evidenciaUri)
+                    repo.editar(st.editandoId, usuario, st.titulo, st.descripcion, categoria, st.servicio, sitioParam, st.evidenciaUri)
                 }
                 _uiState.update { it.copy(guardando = false, guardadoExitosamente = true) }
             } catch (e: Exception) {
@@ -97,4 +104,3 @@ class SolicitudViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 }
-

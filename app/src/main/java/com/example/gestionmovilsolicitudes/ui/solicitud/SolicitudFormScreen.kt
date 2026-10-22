@@ -23,6 +23,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
@@ -57,6 +62,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.example.gestionmovilsolicitudes.model.Categoria
 import com.example.gestionmovilsolicitudes.model.etiqueta
+import com.example.gestionmovilsolicitudes.ui.componentes.CampoFormulario
 import com.example.gestionmovilsolicitudes.ui.componentes.ErrorAnimado
 import java.io.File
 
@@ -124,24 +130,22 @@ fun SolicitudFormScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedTextField(
+            CampoFormulario(
                 value = state.titulo,
                 onValueChange = vm::onTituloChange,
-                label = { Text("Título") },
-                singleLine = true,
-                isError = state.tituloError != null,
-                supportingText = { ErrorAnimado(state.tituloError) },
-                modifier = Modifier.fillMaxWidth()
+                label = "Título",
+                icono = Icons.Default.Create,
+                error = state.tituloError
             )
 
-            OutlinedTextField(
+            CampoFormulario(
                 value = state.descripcion,
                 onValueChange = vm::onDescripcionChange,
-                label = { Text("Descripción") },
-                minLines = 3,
-                isError = state.descripcionError != null,
-                supportingText = { ErrorAnimado(state.descripcionError) },
-                modifier = Modifier.fillMaxWidth()
+                label = "Descripción",
+                icono = Icons.Default.Info,
+                error = state.descripcionError,
+                singleLine = false,
+                minLines = 3
             )
 
             ExposedDropdownMenuBox(expanded = menuAbierto, onExpandedChange = { menuAbierto = it }) {
@@ -150,6 +154,7 @@ fun SolicitudFormScreen(
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Categoría") },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = menuAbierto) },
                     isError = state.categoriaError != null,
                     supportingText = { ErrorAnimado(state.categoriaError) },
@@ -170,14 +175,20 @@ fun SolicitudFormScreen(
                 }
             }
 
-            OutlinedTextField(
+            CampoFormulario(
                 value = state.servicio,
                 onValueChange = vm::onServicioChange,
-                label = { Text("Servicio relacionado") },
-                singleLine = true,
-                isError = state.servicioError != null,
-                supportingText = { ErrorAnimado(state.servicioError) },
-                modifier = Modifier.fillMaxWidth()
+                label = "Servicio relacionado",
+                icono = Icons.Default.Build,
+                error = state.servicioError
+            )
+
+            CampoFormulario(
+                value = state.sitio,
+                onValueChange = vm::onSitioChange,
+                label = "Sitio web o activo relacionado (opcional)",
+                icono = Icons.Default.Place,
+                error = state.sitioError
             )
 
             Text("Evidencia (foto)", style = MaterialTheme.typography.titleSmall)

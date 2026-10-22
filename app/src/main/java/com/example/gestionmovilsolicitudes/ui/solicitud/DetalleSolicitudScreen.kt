@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -29,7 +30,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -54,10 +54,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.example.gestionmovilsolicitudes.data.dao.EventoHistorial
 import com.example.gestionmovilsolicitudes.domain.MensajeSeguimiento
+import com.example.gestionmovilsolicitudes.domain.ValidadorTexto
 import com.example.gestionmovilsolicitudes.model.EstadoSolicitud
 import com.example.gestionmovilsolicitudes.model.Perfil
 import com.example.gestionmovilsolicitudes.model.Prioridad
 import com.example.gestionmovilsolicitudes.model.etiqueta
+import com.example.gestionmovilsolicitudes.ui.componentes.CampoFormulario
 
 private enum class Dialogo { REABRIR, RESPONDER, CANCELAR, AVANCE, PEDIR_INFO, SOLUCION }
 
@@ -369,7 +371,7 @@ fun DetalleSolicitudScreen(
                                     ) { Text("Responder solicitud de información") }
                                 }
                                 if (state.puedeConfirmar) {
-                                    Text("La empresa registró una solución. Confirma si estás conforme.")
+                                    Text("La empresa registró una solución. Confirms si estás conforme.")
                                     state.ultimaSolucion?.let { Cita("Solución propuesta", it) }
                                     Button(
                                         onClick = vm::confirmarResolucion,
@@ -393,14 +395,14 @@ fun DetalleSolicitudScreen(
                 if (state.puedeComentar) {
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
+                            CampoFormulario(
                                 value = state.comentario,
                                 onValueChange = vm::onComentarioChange,
-                                label = { Text("Agregar comentario") },
-                                minLines = 2,
-                                isError = state.comentarioError != null,
-                                supportingText = { Text(state.comentarioError ?: "") },
-                                modifier = Modifier.fillMaxWidth()
+                                label = "Agregar comentario",
+                                icono = Icons.Default.Create,
+                                error = state.comentarioError,
+                                singleLine = false,
+                                minLines = 2
                             )
                             Button(
                                 onClick = vm::enviarComentario,
@@ -522,20 +524,31 @@ private fun DialogoTexto(
     onDismiss: () -> Unit
 ) {
     var texto by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(titulo) },
         text = {
-            OutlinedTextField(
+            CampoFormulario(
                 value = texto,
-                onValueChange = { texto = it },
-                label = { Text(etiqueta) },
-                minLines = 3,
-                modifier = Modifier.fillMaxWidth()
+                onValueChange = {
+                    texto = it
+                    error = null
+                },
+                label = etiqueta,
+                icono = Icons.Default.Create,
+                error = error,
+                singleLine = false,
+                minLines = 3
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(texto) }, enabled = texto.isNotBlank()) { Text("Enviar") }
+            TextButton(onClick = {
+                // La regla de validación vive en el dominio; el diálogo solo muestra el error
+                val problema = ValidadorTexto.validar(texto)
+                if (problema != null) error = problema else onConfirm(texto)
+            }) { Text("Enviar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )
