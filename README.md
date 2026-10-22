@@ -8,10 +8,10 @@ Una pequeña empresa de servicios informáticos recibe hoy los requerimientos de
 
 ## Integrantes
 
-| Nombre | Aporte principal |
-|---|---|
+| Nombre | Aporte principal                                                                                                                            |
+|---|---------------------------------------------------------------------------------------------------------------------------------------------|
 | Matias Figueroa | Capa de datos con Room, repositorio, login, menú, lista, formulario, detalle, paneles del administrador y del técnico, compartir referencia |
-| Diego Nuñez | Integración de la cámara (Coil, FileProvider y captura de foto de evidencia) |
+| Diego Nuñez | Integración de la cámara (Coil, FileProvider y captura de foto de evidencia) , informe y trello                                             |
 
 - **Docente:** Vicente Julio Zapata Valenzuela
 - **Asignatura:** DSY1105 – Desarrollo de Aplicaciones Móviles

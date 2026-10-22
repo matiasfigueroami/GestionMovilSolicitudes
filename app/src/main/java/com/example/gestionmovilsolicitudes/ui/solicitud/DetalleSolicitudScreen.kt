@@ -1,5 +1,6 @@
 package com.example.gestionmovilsolicitudes.ui.solicitud
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,17 +47,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.example.gestionmovilsolicitudes.data.dao.EventoHistorial
+import com.example.gestionmovilsolicitudes.domain.MensajeSeguimiento
 import com.example.gestionmovilsolicitudes.model.EstadoSolicitud
 import com.example.gestionmovilsolicitudes.model.Perfil
 import com.example.gestionmovilsolicitudes.model.Prioridad
 import com.example.gestionmovilsolicitudes.model.etiqueta
-import androidx.compose.ui.platform.LocalContext
-import com.example.gestionmovilsolicitudes.domain.MensajeSeguimiento
+
 private enum class Dialogo { REABRIR, RESPONDER, CANCELAR, AVANCE, PEDIR_INFO, SOLUCION }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -124,7 +126,7 @@ fun DetalleSolicitudScreen(
             ) {
                 // ---- Encabezado: título, estado vigente y prioridad ----
                 item {
-                    Card(Modifier.fillMaxWidth()) {
+                    Card(Modifier.fillMaxWidth().animateContentSize()) {
                         Column(
                             Modifier.padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -165,7 +167,7 @@ fun DetalleSolicitudScreen(
 
                 // ---- Datos de la solicitud ----
                 item {
-                    Card(Modifier.fillMaxWidth()) {
+                    Card(Modifier.fillMaxWidth().animateContentSize()) {
                         Column(
                             Modifier.padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -187,7 +189,7 @@ fun DetalleSolicitudScreen(
 
                 // ---- Descripción ----
                 item {
-                    Card(Modifier.fillMaxWidth()) {
+                    Card(Modifier.fillMaxWidth().animateContentSize()) {
                         Column(
                             Modifier.padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -201,7 +203,7 @@ fun DetalleSolicitudScreen(
                 // ---- Evidencia fotográfica (si la solicitud tiene una) ----
                 s.evidenciaUri?.let { uri ->
                     item {
-                        Card(Modifier.fillMaxWidth()) {
+                        Card(Modifier.fillMaxWidth().animateContentSize()) {
                             Column(
                                 Modifier.padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -224,7 +226,7 @@ fun DetalleSolicitudScreen(
                 // ---- Gestión (solo administrador) ----
                 if (state.esAdmin) {
                     item {
-                        Card(Modifier.fillMaxWidth()) {
+                        Card(Modifier.fillMaxWidth().animateContentSize()) {
                             Column(
                                 Modifier.padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -309,7 +311,7 @@ fun DetalleSolicitudScreen(
                 // ---- Trabajo del técnico ----
                 if (state.tieneAccionesTecnico) {
                     item {
-                        Card(Modifier.fillMaxWidth()) {
+                        Card(Modifier.fillMaxWidth().animateContentSize()) {
                             Column(
                                 Modifier.padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -351,7 +353,7 @@ fun DetalleSolicitudScreen(
                 // ---- Acciones del cliente según el estado ----
                 if (state.puedeResponder || state.puedeConfirmar || state.puedeReabrir) {
                     item {
-                        Card(Modifier.fillMaxWidth()) {
+                        Card(Modifier.fillMaxWidth().animateContentSize()) {
                             Column(
                                 Modifier.padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -411,7 +413,9 @@ fun DetalleSolicitudScreen(
 
                 // ---- Historial cronológico ----
                 item { Text("Historial", style = MaterialTheme.typography.titleMedium) }
-                items(state.historial, key = { it.id }) { evento -> HistorialItem(evento) }
+                items(state.historial, key = { it.id }) { evento ->
+                    HistorialItem(evento, modifier = Modifier.animateItem())
+                }
             }
         }
     }
@@ -485,8 +489,8 @@ private fun Fila(etiqueta: String, valor: String) {
 }
 
 @Composable
-private fun HistorialItem(e: EventoHistorial) {
-    Card(Modifier.fillMaxWidth()) {
+private fun HistorialItem(e: EventoHistorial, modifier: Modifier = Modifier) {
+    Card(modifier.fillMaxWidth().animateContentSize()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(formatearFechaHora(e.fechaHora), style = MaterialTheme.typography.labelSmall)
             Text(e.accionRealizada, style = MaterialTheme.typography.titleSmall)

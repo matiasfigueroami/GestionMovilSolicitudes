@@ -75,7 +75,11 @@ fun ListaSolicitudesScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(solicitudes, key = { it.id }) { s ->
-                    SolicitudCard(s, onClick = { onAbrir(s.id) })
+                    SolicitudCard(
+                        s = s,
+                        onClick = { onAbrir(s.id) },
+                        modifier = Modifier.animateItem()
+                    )
                 }
             }
         }
@@ -83,8 +87,12 @@ fun ListaSolicitudesScreen(
 }
 
 @Composable
-private fun SolicitudCard(s: SolicitudEntity, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+private fun SolicitudCard(
+    s: SolicitudEntity,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(onClick = onClick, modifier = modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),

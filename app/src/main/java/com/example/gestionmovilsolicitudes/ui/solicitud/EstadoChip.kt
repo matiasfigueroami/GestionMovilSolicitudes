@@ -10,7 +10,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.gestionmovilsolicitudes.model.EstadoSolicitud
 import com.example.gestionmovilsolicitudes.model.etiqueta
-
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.getValue
 private fun colorEstado(estado: EstadoSolicitud): Color = when (estado) {
     EstadoSolicitud.RECIBIDA -> Color(0xFF1565C0)
     EstadoSolicitud.EN_REVISION -> Color(0xFF6A1B9A)
@@ -24,12 +30,20 @@ private fun colorEstado(estado: EstadoSolicitud): Color = when (estado) {
 
 @Composable
 fun EstadoChip(estado: EstadoSolicitud, modifier: Modifier = Modifier) {
-    Surface(color = colorEstado(estado), shape = MaterialTheme.shapes.small, modifier = modifier) {
-        Text(
-            text = estado.etiqueta(),
-            color = Color.White,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-        )
+    // El color y el texto cambian con una transición cuando cambia el estado
+    val color by animateColorAsState(colorEstado(estado), tween(400), label = "colorEstado")
+    Surface(color = color, shape = MaterialTheme.shapes.small, modifier = modifier) {
+        AnimatedContent(
+            targetState = estado,
+            transitionSpec = { fadeIn(tween(250)) togetherWith fadeOut(tween(250)) },
+            label = "textoEstado"
+        ) { e ->
+            Text(
+                text = e.etiqueta(),
+                color = Color.White,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+        }
     }
 }

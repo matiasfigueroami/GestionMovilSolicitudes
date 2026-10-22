@@ -1,5 +1,10 @@
 package com.example.gestionmovilsolicitudes.ui.navigation
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,7 +52,15 @@ fun AppNavigation() {
         }
     }
 
-    NavHost(navController = nav, startDestination = Rutas.LOGIN) {
+    NavHost(
+        navController = nav,
+        startDestination = Rutas.LOGIN,
+        // Transiciones entre pantallas: deslizamiento suave con fundido
+        enterTransition = { slideInHorizontally(tween(350)) { it / 4 } + fadeIn(tween(350)) },
+        exitTransition = { slideOutHorizontally(tween(350)) { -it / 4 } + fadeOut(tween(250)) },
+        popEnterTransition = { slideInHorizontally(tween(350)) { -it / 4 } + fadeIn(tween(350)) },
+        popExitTransition = { slideOutHorizontally(tween(350)) { it / 4 } + fadeOut(tween(250)) }
+    ) {
         composable(Rutas.LOGIN) { LoginScreen() }
 
         composable(Rutas.MENU) {

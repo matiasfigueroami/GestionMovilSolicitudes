@@ -47,6 +47,7 @@ import com.example.gestionmovilsolicitudes.domain.ReglasAtraso
 import com.example.gestionmovilsolicitudes.model.EstadoSolicitud
 import com.example.gestionmovilsolicitudes.model.Prioridad
 import com.example.gestionmovilsolicitudes.model.etiqueta
+import com.example.gestionmovilsolicitudes.ui.componentes.ContadorAnimado
 import com.example.gestionmovilsolicitudes.ui.solicitud.EstadoChip
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -93,12 +94,12 @@ fun AdminPanelScreen(
                             Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
                                 Column {
                                     Text("Total", style = MaterialTheme.typography.labelLarge)
-                                    Text("${state.total}", style = MaterialTheme.typography.headlineMedium)
+                                    ContadorAnimado(state.total, style = MaterialTheme.typography.headlineMedium)
                                 }
                                 Column(Modifier.clickable { vm.onSoloAtrasadas(!state.soloAtrasadas) }) {
                                     Text("Atrasadas", style = MaterialTheme.typography.labelLarge)
-                                    Text(
-                                        "${state.atrasadas}",
+                                    ContadorAnimado(
+                                        valor = state.atrasadas,
                                         style = MaterialTheme.typography.headlineMedium,
                                         color = if (state.atrasadas > 0) MaterialTheme.colorScheme.error
                                         else MaterialTheme.colorScheme.onSurface
@@ -119,7 +120,7 @@ fun AdminPanelScreen(
                                         }
                                     ) {
                                         EstadoChip(estado)
-                                        Text("$total", style = MaterialTheme.typography.titleMedium)
+                                        ContadorAnimado(total, style = MaterialTheme.typography.titleMedium)
                                     }
                                 }
                             }
@@ -148,7 +149,7 @@ fun AdminPanelScreen(
                             state.porResponsable.forEach { (nombre, total) ->
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text(nombre)
-                                    Text("$total", style = MaterialTheme.typography.titleSmall)
+                                    ContadorAnimado(total, style = MaterialTheme.typography.titleSmall)
                                 }
                             }
                         }
@@ -237,7 +238,11 @@ fun AdminPanelScreen(
                     item { Text("No hay solicitudes con esos filtros") }
                 }
                 items(state.solicitudes, key = { it.id }) { s ->
-                    SolicitudAdminCard(s, onClick = { onAbrir(s.id) })
+                    SolicitudAdminCard(
+                        s = s,
+                        onClick = { onAbrir(s.id) },
+                        modifier = Modifier.animateItem()
+                    )
                 }
             }
         }
@@ -245,8 +250,12 @@ fun AdminPanelScreen(
 }
 
 @Composable
-private fun SolicitudAdminCard(s: SolicitudEntity, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+private fun SolicitudAdminCard(
+    s: SolicitudEntity,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(onClick = onClick, modifier = modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),

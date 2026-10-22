@@ -37,6 +37,7 @@ import com.example.gestionmovilsolicitudes.data.dao.ActividadReciente
 import com.example.gestionmovilsolicitudes.data.entity.SolicitudEntity
 import com.example.gestionmovilsolicitudes.domain.ReglasAtraso
 import com.example.gestionmovilsolicitudes.model.etiqueta
+import com.example.gestionmovilsolicitudes.ui.componentes.ContadorAnimado
 import com.example.gestionmovilsolicitudes.ui.solicitud.EstadoChip
 import com.example.gestionmovilsolicitudes.ui.solicitud.formatearFechaHora
 
@@ -84,12 +85,12 @@ fun TecnicoPanelScreen(
                             Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
                                 Column {
                                     Text("Total", style = MaterialTheme.typography.labelLarge)
-                                    Text("${state.total}", style = MaterialTheme.typography.headlineMedium)
+                                    ContadorAnimado(state.total, style = MaterialTheme.typography.headlineMedium)
                                 }
                                 Column {
                                     Text("Atrasadas", style = MaterialTheme.typography.labelLarge)
-                                    Text(
-                                        "${state.atrasadas}",
+                                    ContadorAnimado(
+                                        valor = state.atrasadas,
                                         style = MaterialTheme.typography.headlineMedium,
                                         color = if (state.atrasadas > 0) MaterialTheme.colorScheme.error
                                         else MaterialTheme.colorScheme.onSurface
@@ -108,7 +109,7 @@ fun TecnicoPanelScreen(
                                         modifier = Modifier.clickable { vm.onEstado(estado) }
                                     ) {
                                         EstadoChip(estado)
-                                        Text("$total", style = MaterialTheme.typography.titleMedium)
+                                        ContadorAnimado(total, style = MaterialTheme.typography.titleMedium)
                                     }
                                 }
                             }
@@ -141,7 +142,11 @@ fun TecnicoPanelScreen(
                     }
                 }
                 items(state.solicitudes, key = { it.id }) { s ->
-                    SolicitudTecnicoCard(s, onClick = { onAbrir(s.id) })
+                    SolicitudTecnicoCard(
+                        s = s,
+                        onClick = { onAbrir(s.id) },
+                        modifier = Modifier.animateItem()
+                    )
                 }
 
                 // ---------- Historial de mis acciones ----------
@@ -149,15 +154,21 @@ fun TecnicoPanelScreen(
                 if (state.actividad.isEmpty()) {
                     item { Text("Todavía no has realizado acciones") }
                 }
-                items(state.actividad, key = { it.id }) { a -> ActividadItem(a) }
+                items(state.actividad, key = { it.id }) { a ->
+                    ActividadItem(a, modifier = Modifier.animateItem())
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SolicitudTecnicoCard(s: SolicitudEntity, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+private fun SolicitudTecnicoCard(
+    s: SolicitudEntity,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(onClick = onClick, modifier = modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -184,8 +195,11 @@ private fun SolicitudTecnicoCard(s: SolicitudEntity, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ActividadItem(a: ActividadReciente) {
-    Card(Modifier.fillMaxWidth()) {
+private fun ActividadItem(
+    a: ActividadReciente,
+    modifier: Modifier = Modifier
+) {
+    Card(modifier = modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(formatearFechaHora(a.fechaHora), style = MaterialTheme.typography.labelSmall)
             Text("${a.codigo} · ${a.accion}", style = MaterialTheme.typography.titleSmall)

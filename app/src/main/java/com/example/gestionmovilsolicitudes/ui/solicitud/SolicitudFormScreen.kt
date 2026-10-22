@@ -3,19 +3,28 @@ package com.example.gestionmovilsolicitudes.ui.solicitud
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -23,6 +32,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -44,9 +54,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil3.compose.AsyncImage
 import com.example.gestionmovilsolicitudes.model.Categoria
 import com.example.gestionmovilsolicitudes.model.etiqueta
-import coil3.compose.AsyncImage
+import com.example.gestionmovilsolicitudes.ui.componentes.ErrorAnimado
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -119,7 +130,7 @@ fun SolicitudFormScreen(
                 label = { Text("Título") },
                 singleLine = true,
                 isError = state.tituloError != null,
-                supportingText = { Text(state.tituloError ?: "") },
+                supportingText = { ErrorAnimado(state.tituloError) },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -129,7 +140,7 @@ fun SolicitudFormScreen(
                 label = { Text("Descripción") },
                 minLines = 3,
                 isError = state.descripcionError != null,
-                supportingText = { Text(state.descripcionError ?: "") },
+                supportingText = { ErrorAnimado(state.descripcionError) },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -141,7 +152,7 @@ fun SolicitudFormScreen(
                     label = { Text("Categoría") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = menuAbierto) },
                     isError = state.categoriaError != null,
-                    supportingText = { Text(state.categoriaError ?: "") },
+                    supportingText = { ErrorAnimado(state.categoriaError) },
                     modifier = Modifier
                         .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                         .fillMaxWidth()
@@ -165,7 +176,7 @@ fun SolicitudFormScreen(
                 label = { Text("Servicio relacionado") },
                 singleLine = true,
                 isError = state.servicioError != null,
-                supportingText = { Text(state.servicioError ?: "") },
+                supportingText = { ErrorAnimado(state.servicioError) },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -199,6 +210,21 @@ fun SolicitudFormScreen(
                 enabled = !state.guardando,
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
+                // Indicador de progreso que aparece mientras se guarda
+                AnimatedVisibility(
+                    visible = state.guardando,
+                    enter = fadeIn() + expandHorizontally(),
+                    exit = fadeOut() + shrinkHorizontally()
+                ) {
+                    Row {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = LocalContentColor.current
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                }
                 Text(if (state.guardando) "Guardando..." else "Guardar")
             }
         }

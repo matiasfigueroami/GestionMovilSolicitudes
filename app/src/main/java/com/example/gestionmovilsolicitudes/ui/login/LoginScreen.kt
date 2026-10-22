@@ -1,5 +1,10 @@
 package com.example.gestionmovilsolicitudes.ui.login
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -8,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.gestionmovilsolicitudes.ui.componentes.ErrorAnimado
 
 @Composable
 fun LoginScreen(vm: LoginViewModel = viewModel()) {
@@ -36,10 +42,7 @@ fun LoginScreen(vm: LoginViewModel = viewModel()) {
             modifier = Modifier.fillMaxWidth()
         )
 
-        vm.error?.let {
-            Spacer(Modifier.height(8.dp))
-            Text(it, color = MaterialTheme.colorScheme.error)
-        }
+        ErrorAnimado(vm.error, color = MaterialTheme.colorScheme.error)
 
         Spacer(Modifier.height(20.dp))
         Button(
@@ -47,6 +50,20 @@ fun LoginScreen(vm: LoginViewModel = viewModel()) {
             enabled = !vm.cargando,
             modifier = Modifier.fillMaxWidth().height(52.dp)
         ) {
+            AnimatedVisibility(
+                visible = vm.cargando,
+                enter = fadeIn() + expandHorizontally(),
+                exit = fadeOut() + shrinkHorizontally()
+            ) {
+                Row {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = LocalContentColor.current
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+            }
             Text(if (vm.cargando) "Ingresando..." else "Ingresar")
         }
 
