@@ -4,18 +4,26 @@ import androidx.room.withTransaction
 import com.example.gestionmovilsolicitudes.data.AppDatabase
 import com.example.gestionmovilsolicitudes.data.dao.ActividadReciente
 import com.example.gestionmovilsolicitudes.data.dao.EventoHistorial
+import com.example.gestionmovilsolicitudes.data.dao.NovedadHistorial
 import com.example.gestionmovilsolicitudes.data.dao.SolicitudDetalle
 import com.example.gestionmovilsolicitudes.data.entity.EvidenciaEntity
 import com.example.gestionmovilsolicitudes.data.entity.HistorialEntity
 import com.example.gestionmovilsolicitudes.data.entity.SolicitudEntity
 import com.example.gestionmovilsolicitudes.data.entity.UsuarioEntity
+import com.example.gestionmovilsolicitudes.domain.NotificacionSolicitud
+import com.example.gestionmovilsolicitudes.domain.ReglasAtraso
 import com.example.gestionmovilsolicitudes.domain.ReglasEstado
+import com.example.gestionmovilsolicitudes.domain.ReglasNotificacion
 import com.example.gestionmovilsolicitudes.model.Categoria
 import com.example.gestionmovilsolicitudes.model.EstadoSolicitud
 import com.example.gestionmovilsolicitudes.model.Perfil
 import com.example.gestionmovilsolicitudes.model.Prioridad
 import com.example.gestionmovilsolicitudes.model.etiqueta
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.util.Calendar
 
@@ -24,6 +32,10 @@ class SolicitudRepository(private val db: AppDatabase) {
     private val solicitudDao = db.solicitudDao()
     private val historialDao = db.historialDao()
     private val evidenciaDao = db.evidenciaDao()
+
+    // Avisos que la app convierte en notificaciones locales (el repositorio no conoce Android)
+    private val _eventos = MutableSharedFlow<NotificacionSolicitud>(extraBufferCapacity = 32)
+    val eventos: SharedFlow<NotificacionSolicitud> = _eventos.asSharedFlow()
 
     // ---------- Crear ----------
     suspend fun crear(
@@ -54,6 +66,7 @@ class SolicitudRepository(private val db: AppDatabase) {
             )
         )
         registrarHistorial(id, null, EstadoSolicitud.RECIBIDA, "Solicitud creada", null, usuario)
+        solicitudDao.obtenerPorId(id)?.let { _eventos.tryEmit(ReglasNotificacion.nuevaSolicitud(it)) }
         id
     }
 
@@ -91,6 +104,7 @@ class SolicitudRepository(private val db: AppDatabase) {
                 motivoCancelacion = if (nuevo == EstadoSolicitud.CANCELADA) comentario else s.motivoCancelacion
             )
         )
+        ReglasNotificacion.cambioEstado(s, nuevo, usuario.perfil)?.let { _eventos.tryEmit(it) }
         registrarHistorial(s.id, s.estado, nuevo, accion ?: "Cambio de estado a ${nuevo.etiqueta()}", comentario, usuario)
     }
 
@@ -101,6 +115,7 @@ class SolicitudRepository(private val db: AppDatabase) {
             exigirAdmin(admin)
             val s = solicitudDao.obtenerPorId(solicitudId) ?: error("La solicitud no existe")
             solicitudDao.actualizar(s.copy(prioridad = prioridad, fechaActualizacion = System.currentTimeMillis()))
+            _eventos.tryEmit(ReglasNotificacion.prioridadCambiada(s, prioridad))
             registrarHistorial(s.id, s.estado, s.estado, "Prioridad definida: ${prioridad.etiqueta()}", null, admin)
         }
 
@@ -117,8 +132,15 @@ class SolicitudRepository(private val db: AppDatabase) {
             solicitudDao.actualizar(
                 s.copy(responsableId = tecnicoId, estado = nuevoEstado, fechaActualizacion = System.currentTimeMillis())
             )
+            _eventos.tryEmit(ReglasNotificacion.asignada(s))
             registrarHistorial(s.id, s.estado, nuevoEstado, "Asignada a ${tecnico.nombre}", null, admin)
         }
+
+    /** Cantidad de solicitudes atrasadas (para avisar al administrador al entrar). */
+    suspend fun contarAtrasadas(admin: UsuarioEntity): Int {
+        exigirAdmin(admin)
+        return solicitudDao.observarAtrasadas(ReglasAtraso.limite()).first().size
+    }
 
     // ---------- Acciones del técnico ----------
 
@@ -130,12 +152,23 @@ class SolicitudRepository(private val db: AppDatabase) {
             verificarAcceso(s, tecnico)
             check(s.estado == EstadoSolicitud.EN_PROCESO) { "Solo se registran avances en solicitudes en proceso" }
             solicitudDao.actualizar(s.copy(fechaActualizacion = System.currentTimeMillis()))
+            _eventos.tryEmit(ReglasNotificacion.avance(s))
             registrarHistorial(s.id, s.estado, s.estado, "Avance registrado", texto.trim(), tecnico)
         }
 
     /** Acciones más recientes realizadas por el usuario (historial de sus acciones). */
     fun observarActividad(usuario: UsuarioEntity): Flow<List<ActividadReciente>> =
         historialDao.observarActividadDeUsuario(usuario.id, 15)
+
+    /** Cambios de otras personas en las solicitudes del usuario desde [desde] (para avisarle al entrar). */
+    suspend fun novedadesDesde(usuario: UsuarioEntity, desde: Long): List<NovedadHistorial> =
+        historialDao.novedadesPara(
+            usuarioId = usuario.id,
+            desde = desde,
+            esAdmin = usuario.perfil == Perfil.ADMINISTRADOR,
+            clienteId = if (usuario.perfil == Perfil.CLIENTE) usuario.clienteId else null,
+            tecnicoId = if (usuario.perfil == Perfil.TECNICO) usuario.id else null
+        )
 
     // ---------- Comentarios y evidencias ----------
 
@@ -145,6 +178,7 @@ class SolicitudRepository(private val db: AppDatabase) {
             val s = solicitudDao.obtenerPorId(solicitudId) ?: error("La solicitud no existe")
             verificarAcceso(s, usuario)
             solicitudDao.actualizar(s.copy(fechaActualizacion = System.currentTimeMillis()))
+            _eventos.tryEmit(ReglasNotificacion.comentario(s, usuario.perfil))
             registrarHistorial(s.id, s.estado, s.estado, "Comentario", texto.trim(), usuario)
         }
 

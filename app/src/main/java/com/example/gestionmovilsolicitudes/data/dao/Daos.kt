@@ -33,6 +33,17 @@ data class ActividadReciente(
     val estadoNuevo: EstadoSolicitud,
     val fechaHora: Long
 )
+
+/** Cambio hecho por otra persona en una solicitud del usuario, desde su última sesión. */
+data class NovedadHistorial(
+    val id: Long,
+    val solicitudId: Long,
+    val codigo: String,
+    val titulo: String,
+    val accion: String,
+    val comentario: String?,
+    val fechaHora: Long
+)
 /** Evento del historial con el nombre del usuario que lo realizó. */
 data class EventoHistorial(
     val id: Long,
@@ -185,6 +196,31 @@ interface HistorialDao {
     """
     )
     fun observarActividadDeUsuario(usuarioId: Long, limite: Int): Flow<List<ActividadReciente>>
+
+    /**
+     * Cambios posteriores a [desde] hechos por OTROS usuarios en solicitudes que le conciernen:
+     * todas si es administrador, las suyas si es cliente o las asignadas si es técnico.
+     */
+    @Query(
+        """
+        SELECT h.id AS id, s.id AS solicitudId, s.codigoSeguimiento AS codigo, s.titulo AS titulo,
+               h.accionRealizada AS accion, h.comentario AS comentario, h.fechaHora AS fechaHora
+        FROM historial h
+        INNER JOIN solicitudes s ON s.id = h.solicitudId
+        WHERE h.fechaHora > :desde
+          AND h.usuarioResponsableId != :usuarioId
+          AND (:esAdmin = 1 OR s.clienteId = :clienteId OR s.responsableId = :tecnicoId)
+        ORDER BY h.fechaHora DESC, h.id DESC
+        LIMIT 20
+        """
+    )
+    suspend fun novedadesPara(
+        usuarioId: Long,
+        desde: Long,
+        esAdmin: Boolean,
+        clienteId: Long?,
+        tecnicoId: Long?
+    ): List<NovedadHistorial>
 }
 
 @Dao
