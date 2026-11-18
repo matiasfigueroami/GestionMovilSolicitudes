@@ -37,6 +37,7 @@ Una pequeña empresa de servicios informáticos recibe hoy los requerimientos de
 ### Administrador
 - Ve todas las solicitudes.
 - Define la **prioridad**, **asigna o reasigna** el responsable, cambia el estado según las reglas y cancela con motivo.
+- **Elimina solicitudes** desde el detalle, con confirmación previa; su historial y evidencias se eliminan con ella. Solo el administrador puede hacerlo.
 - **Panel del administrador:** total de solicitudes, atrasadas (más de 7 días sin resolver), cantidad por estado, por prioridad y por responsable, y filtros por texto, estado, prioridad, cliente, responsable y solo atrasadas.
 
 ### Técnico
@@ -156,17 +157,28 @@ Al cambiar de perfil, cada usuario ve en la barra de notificaciones las novedade
 
 ## Pruebas
 
-Pruebas unitarias (JVM) con JUnit, 24 en total, que cubren las reglas del dominio sin depender de Android:
+Las pruebas están separadas según lo que verifican:
+
+**Pruebas unitarias de lógica** (`app/src/test`, se ejecutan en el computador, sin emulador). Verifican las **validaciones** del dominio:
 
 | Archivo | Qué comprueba |
 |---|---|
-| `ValidadorSolicitudTest` | Campos obligatorios, largo de título y descripción, servicio según categoría y sitio opcional |
-| `ValidadorLoginTest` | Validación por campo del inicio de sesión (correo, contraseña) y de los textos libres |
-| `MensajeSeguimientoTest` | Contenido del mensaje para compartir, sin la descripción de la solicitud |
-| `ReglasNotificacionTest` | A quién se avisa en cada evento y el resumen de novedades |
+| `ValidadorSolicitudTest` | Un formulario de solicitud vacío marca como obligatorios el título, la descripción y la categoría |
+| `ValidadorLoginTest` | El inicio de sesión con los campos vacíos genera un error por campo (correo y contraseña) |
 
 ```bash
 ./gradlew testDebugUnitTest
+```
+
+**Pruebas instrumentadas de la vista** (`app/src/androidTest`, se ejecutan en un emulador o teléfono). Verifican lo que se ve en pantalla con Compose:
+
+| Archivo | Qué comprueba |
+|---|---|
+| `CampoFormularioTest` | El campo de formulario muestra su etiqueta y el mensaje de error |
+| `EstadoChipTest` | El chip de la solicitud muestra el nombre del estado (*Recibida*) |
+
+```bash
+./gradlew connectedDebugAndroidTest
 ```
 
 ## Próximos pasos

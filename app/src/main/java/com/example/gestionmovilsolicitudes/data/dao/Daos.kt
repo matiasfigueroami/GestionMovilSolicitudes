@@ -1,5 +1,6 @@
 package com.example.gestionmovilsolicitudes.data.dao
 
+import androidx.room.Delete
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
@@ -92,6 +93,13 @@ interface SolicitudDao {
 
     @Update
     suspend fun actualizar(solicitud: SolicitudEntity)
+
+    /** Elimina la solicitud; su historial y sus evidencias se borran con ella (CASCADE). */
+    @Delete
+    suspend fun eliminar(solicitud: SolicitudEntity)
+
+    @Query("SELECT codigoSeguimiento FROM solicitudes WHERE codigoSeguimiento LIKE :prefijo || '%'")
+    suspend fun codigosConPrefijo(prefijo: String): List<String>
 
     @Query("SELECT * FROM solicitudes WHERE id = :id")
     fun observarPorId(id: Long): Flow<SolicitudEntity?>

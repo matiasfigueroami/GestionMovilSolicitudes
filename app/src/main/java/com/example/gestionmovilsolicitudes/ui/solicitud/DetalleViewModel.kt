@@ -30,7 +30,8 @@ class DetalleViewModel(app: Application) : AndroidViewModel(app) {
         val comentario: String = "",
         val comentarioError: String? = null,
         val procesando: Boolean = false,
-        val mensaje: String? = null
+        val mensaje: String? = null,
+        val eliminada: Boolean = false
     )
 
     private val solicitudId = MutableStateFlow<Long?>(null)
@@ -75,7 +76,8 @@ class DetalleViewModel(app: Application) : AndroidViewModel(app) {
                             comentario = l.comentario,
                             comentarioError = l.comentarioError,
                             procesando = l.procesando,
-                            mensaje = l.mensaje
+                            mensaje = l.mensaje,
+                            eliminada = l.eliminada
                         )
                     }
                 }
@@ -209,6 +211,21 @@ class DetalleViewModel(app: Application) : AndroidViewModel(app) {
                 id, EstadoSolicitud.RESUELTA, usuario, texto.trim(),
                 accion = "Solución registrada"
             )
+        }
+    }
+
+    /** El administrador elimina la solicitud; al terminar, la pantalla vuelve atrás. */
+    fun eliminarSolicitud() {
+        val usuario = SessionManager.usuario.value ?: return
+        val id = solicitudId.value ?: return
+        viewModelScope.launch {
+            local.update { it.copy(procesando = true) }
+            try {
+                repo.eliminar(id, usuario)
+                local.update { it.copy(procesando = false, eliminada = true) }
+            } catch (e: Exception) {
+                local.update { it.copy(procesando = false, mensaje = e.message ?: "No se pudo eliminar la solicitud") }
+            }
         }
     }
 

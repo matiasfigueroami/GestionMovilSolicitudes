@@ -1,5 +1,6 @@
 package com.example.gestionmovilsolicitudes.data.repository
 
+import com.example.gestionmovilsolicitudes.domain.GeneradorCodigo
 import androidx.room.withTransaction
 import com.example.gestionmovilsolicitudes.data.AppDatabase
 import com.example.gestionmovilsolicitudes.data.dao.ActividadReciente
@@ -72,7 +73,7 @@ class SolicitudRepository(private val db: AppDatabase) {
 
     private suspend fun generarCodigo(): String {
         val anio = Calendar.getInstance().get(Calendar.YEAR)
-        return "SOL-%d-%04d".format(anio, solicitudDao.contar() + 1)
+        return GeneradorCodigo.siguiente(anio, solicitudDao.codigosConPrefijo(GeneradorCodigo.prefijo(anio)))
     }
 
     // ---------- Cambio de estado ----------
@@ -109,6 +110,14 @@ class SolicitudRepository(private val db: AppDatabase) {
     }
 
     // ---------- Acciones del administrador ----------
+
+    /** Elimina una solicitud con su historial y evidencias. Solo el administrador puede hacerlo. */
+    suspend fun eliminar(solicitudId: Long, admin: UsuarioEntity) =
+        db.withTransaction {
+            exigirAdmin(admin)
+            val s = solicitudDao.obtenerPorId(solicitudId) ?: error("La solicitud no existe")
+            solicitudDao.eliminar(s)
+        }
 
     suspend fun definirPrioridad(solicitudId: Long, prioridad: Prioridad, admin: UsuarioEntity) =
         db.withTransaction {

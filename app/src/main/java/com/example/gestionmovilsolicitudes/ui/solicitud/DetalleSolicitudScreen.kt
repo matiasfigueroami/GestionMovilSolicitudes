@@ -1,5 +1,6 @@
 package com.example.gestionmovilsolicitudes.ui.solicitud
 
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -61,7 +62,7 @@ import com.example.gestionmovilsolicitudes.model.Prioridad
 import com.example.gestionmovilsolicitudes.model.etiqueta
 import com.example.gestionmovilsolicitudes.ui.componentes.CampoFormulario
 
-private enum class Dialogo { REABRIR, RESPONDER, CANCELAR, AVANCE, PEDIR_INFO, SOLUCION }
+private enum class Dialogo { REABRIR, RESPONDER, CANCELAR, AVANCE, PEDIR_INFO, SOLUCION, ELIMINAR }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -76,6 +77,9 @@ fun DetalleSolicitudScreen(
     var dialogo by remember { mutableStateOf<Dialogo?>(null) }
     val context = LocalContext.current
     LaunchedEffect(solicitudId) { vm.cargar(solicitudId) }
+
+    // Si el administrador eliminó la solicitud, se vuelve a la pantalla anterior
+    LaunchedEffect(state.eliminada) { if (state.eliminada) onVolver() }
 
     // Muestra cada mensaje del ViewModel una sola vez
     LaunchedEffect(state.mensaje) {
@@ -305,6 +309,16 @@ fun DetalleSolicitudScreen(
                                         }
                                     }
                                 }
+
+                                // Eliminar (pide confirmación antes de borrar)
+                                OutlinedButton(
+                                    onClick = { dialogo = Dialogo.ELIMINAR },
+                                    enabled = !state.procesando,
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.error
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text("Eliminar solicitud") }
                             }
                         }
                     }
@@ -445,6 +459,15 @@ fun DetalleSolicitudScreen(
                 onDismiss = { dialogo = null }
             )
 
+            Dialogo.ELIMINAR -> DialogoConfirmacion(
+                titulo = "Eliminar solicitud",
+                mensaje = "Se eliminará la solicitud ${state.solicitud?.codigoSeguimiento.orEmpty()} " +
+                    "junto con su historial. Esta acción no se puede deshacer.",
+                confirmar = "Eliminar",
+                onConfirm = { vm.eliminarSolicitud(); dialogo = null },
+                onDismiss = { dialogo = null }
+            )
+
             Dialogo.AVANCE -> DialogoTexto(
                 titulo = "Registrar avance",
                 etiqueta = "¿Qué avanzaste?",
@@ -549,6 +572,27 @@ private fun DialogoTexto(
                 val problema = ValidadorTexto.validar(texto)
                 if (problema != null) error = problema else onConfirm(texto)
             }) { Text("Enviar") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
+}
+
+@Composable
+private fun DialogoConfirmacion(
+    titulo: String,
+    mensaje: String,
+    confirmar: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(titulo) },
+        text = { Text(mensaje) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(confirmar, color = MaterialTheme.colorScheme.error)
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )

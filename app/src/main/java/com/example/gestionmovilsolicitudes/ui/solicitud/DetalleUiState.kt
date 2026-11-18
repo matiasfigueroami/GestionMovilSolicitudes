@@ -23,7 +23,8 @@ data class DetalleUiState(
     val comentario: String = "",
     val comentarioError: String? = null,
     val procesando: Boolean = false,
-    val mensaje: String? = null
+    val mensaje: String? = null,
+    val eliminada: Boolean = false
 
 
 
