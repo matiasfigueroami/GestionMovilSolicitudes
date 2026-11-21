@@ -13,7 +13,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -44,6 +46,7 @@ fun ListaSolicitudesScreen(
 ) {
     val solicitudes by vm.solicitudes.collectAsState()
     val usuario by SessionManager.usuario.collectAsState()
+    val aviso by vm.avisoConexion.collectAsState()
 
     Scaffold(
         topBar = {
@@ -52,6 +55,12 @@ fun ListaSolicitudesScreen(
                 navigationIcon = {
                     IconButton(onClick = onVolver) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                    }
+                },
+                actions = {
+                    // Vuelve a descargar las solicitudes desde el microservicio
+                    IconButton(onClick = vm::recargar) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Actualizar desde el servidor")
                     }
                 }
             )
@@ -64,13 +73,28 @@ fun ListaSolicitudesScreen(
             }
         }
     ) { padding ->
+      Column(Modifier.fillMaxSize().padding(padding)) {
+        // Aviso cuando no se pudo actualizar desde el servidor (se muestran los datos guardados)
+        aviso?.let { mensaje ->
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            ) {
+                Text(
+                    "Sin conexión con el servidor: $mensaje",
+                    modifier = Modifier.padding(12.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+        }
         if (solicitudes.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Aún no hay solicitudes", style = MaterialTheme.typography.bodyLarge)
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -83,6 +107,7 @@ fun ListaSolicitudesScreen(
                 }
             }
         }
+      }
     }
 }
 

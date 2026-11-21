@@ -33,6 +33,15 @@ class SolicitudViewModel(app: Application) : AndroidViewModel(app) {
         .flatMapLatest { u -> if (u == null) flowOf(emptyList()) else repo.observarVisibles(u) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** Mensaje cuando no se pudo actualizar desde el microservicio (null = conectado). */
+    val avisoConexion: StateFlow<String?> = repo.avisoConexion
+
+    /** Botón "Actualizar": vuelve a descargar las solicitudes del servidor. */
+    fun recargar() {
+        val usuario = SessionManager.usuario.value ?: return
+        viewModelScope.launch { repo.intentarSincronizar(usuario) }
+    }
+
     // ---------- Eventos del formulario ----------
     fun onTituloChange(v: String) = _uiState.update { it.copy(titulo = v, tituloError = null) }
     fun onDescripcionChange(v: String) = _uiState.update { it.copy(descripcion = v, descripcionError = null) }

@@ -4,6 +4,8 @@ import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.example.gestionmovilsolicitudes.GestionApp
 import com.example.gestionmovilsolicitudes.model.Perfil
 import com.example.gestionmovilsolicitudes.session.SessionManager
+import com.example.gestionmovilsolicitudes.ui.indicadores.IndicadoresCard
 
 @Composable
 fun MenuScreen(
@@ -48,7 +51,7 @@ fun MenuScreen(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -98,6 +101,10 @@ fun MenuScreen(
         OutlinedButton(onClick = onCerrarSesion, modifier = Modifier.fillMaxWidth().height(52.dp)) {
             Text("Cerrar sesión")
         }
+
+        // API externa consumida con Retrofit (mindicador.cl)
+        Spacer(Modifier.height(24.dp))
+        IndicadoresCard()
     }
 }
 

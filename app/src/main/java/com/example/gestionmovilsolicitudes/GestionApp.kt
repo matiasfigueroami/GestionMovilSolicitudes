@@ -2,7 +2,8 @@ package com.example.gestionmovilsolicitudes
 
 import android.app.Application
 import com.example.gestionmovilsolicitudes.data.AppDatabase
-import com.example.gestionmovilsolicitudes.data.SeedData
+import com.example.gestionmovilsolicitudes.data.remote.ApiClient
+import com.example.gestionmovilsolicitudes.data.repository.IndicadoresRepository
 import com.example.gestionmovilsolicitudes.data.repository.SolicitudRepository
 import com.example.gestionmovilsolicitudes.domain.ReglasNotificacion
 import com.example.gestionmovilsolicitudes.model.Perfil
@@ -17,19 +18,19 @@ import kotlinx.coroutines.launch
 class GestionApp : Application() {
 
     val database by lazy { AppDatabase.getInstance(this) }
-    val repository by lazy { SolicitudRepository(database) }
+    // Los datos viven en los microservicios Spring Boot; Room guarda una copia local
+    val repository by lazy { SolicitudRepository(database, ApiClient.usuarios, ApiClient.solicitudes) }
+
+    // API externa (mindicador.cl) consumida con Retrofit
+    val indicadoresRepository by lazy { IndicadoresRepository(ApiClient.indicadores) }
 
     val notificador by lazy { Notificador(this) }
     private val ultimaConexion by lazy { UltimaConexion(this) }
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
-    // Se guarda el Job para poder esperar a que termine el sembrado antes del login
-    val seedJob by lazy { scope.launch { SeedData.sembrarSiVacia(database) } }
-
     override fun onCreate() {
         super.onCreate()
-        seedJob // fuerza que el sembrado parta al abrir la app
         // Los eventos del repositorio se muestran como notificaciones locales
         scope.launch { repository.eventos.collect { notificador.mostrar(it) } }
 

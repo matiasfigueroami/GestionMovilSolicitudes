@@ -1,44 +1,177 @@
 package com.example.gestionmovilsolicitudes.data.repository
 
-import com.example.gestionmovilsolicitudes.domain.GeneradorCodigo
 import androidx.room.withTransaction
 import com.example.gestionmovilsolicitudes.data.AppDatabase
 import com.example.gestionmovilsolicitudes.data.dao.ActividadReciente
 import com.example.gestionmovilsolicitudes.data.dao.EventoHistorial
 import com.example.gestionmovilsolicitudes.data.dao.NovedadHistorial
 import com.example.gestionmovilsolicitudes.data.dao.SolicitudDetalle
-import com.example.gestionmovilsolicitudes.data.entity.EvidenciaEntity
-import com.example.gestionmovilsolicitudes.data.entity.HistorialEntity
 import com.example.gestionmovilsolicitudes.data.entity.SolicitudEntity
 import com.example.gestionmovilsolicitudes.data.entity.UsuarioEntity
+import com.example.gestionmovilsolicitudes.data.remote.ApiException
+import com.example.gestionmovilsolicitudes.data.remote.AsignacionRequest
+import com.example.gestionmovilsolicitudes.data.remote.CambioEstadoRequest
+import com.example.gestionmovilsolicitudes.data.remote.LoginRequest
+import com.example.gestionmovilsolicitudes.data.remote.PrioridadRequest
+import com.example.gestionmovilsolicitudes.data.remote.SolicitudDto
+import com.example.gestionmovilsolicitudes.data.remote.SolicitudRequest
+import com.example.gestionmovilsolicitudes.data.remote.SolicitudesApi
+import com.example.gestionmovilsolicitudes.data.remote.TextoRequest
+import com.example.gestionmovilsolicitudes.data.remote.UsuariosApi
+import com.example.gestionmovilsolicitudes.data.remote.aEntidad
+import com.example.gestionmovilsolicitudes.data.remote.llamarApi
 import com.example.gestionmovilsolicitudes.domain.NotificacionSolicitud
 import com.example.gestionmovilsolicitudes.domain.ReglasAtraso
-import com.example.gestionmovilsolicitudes.domain.ReglasEstado
 import com.example.gestionmovilsolicitudes.domain.ReglasNotificacion
 import com.example.gestionmovilsolicitudes.model.Categoria
 import com.example.gestionmovilsolicitudes.model.EstadoSolicitud
 import com.example.gestionmovilsolicitudes.model.Perfil
 import com.example.gestionmovilsolicitudes.model.Prioridad
-import com.example.gestionmovilsolicitudes.model.etiqueta
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import java.util.Calendar
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
-class SolicitudRepository(private val db: AppDatabase) {
+/**
+ * Fuente de datos de la app.
+ *
+ * - Las escrituras (crear, editar, eliminar, cambiar estado, asignar, comentar...) se envían a los
+ *   microservicios Spring Boot con Retrofit. El servidor aplica las reglas de negocio y registra el historial.
+ * - La respuesta del servidor se guarda en Room, que funciona como caché local: las pantallas siguen
+ *   observando Room (Flow) y se actualizan solas cuando llega la respuesta.
+ * - Las lecturas descargan los datos del servidor al abrir cada pantalla (onStart → sincronizar).
+ */
+class SolicitudRepository(
+    private val db: AppDatabase,
+    private val usuariosApi: UsuariosApi,
+    private val solicitudesApi: SolicitudesApi
+) {
 
     private val solicitudDao = db.solicitudDao()
     private val historialDao = db.historialDao()
-    private val evidenciaDao = db.evidenciaDao()
+    private val usuarioDao = db.usuarioDao()
+    private val clienteDao = db.clienteDao()
 
     // Avisos que la app convierte en notificaciones locales (el repositorio no conoce Android)
     private val _eventos = MutableSharedFlow<NotificacionSolicitud>(extraBufferCapacity = 32)
     val eventos: SharedFlow<NotificacionSolicitud> = _eventos.asSharedFlow()
 
-    // ---------- Crear ----------
+    // Último problema al sincronizar con el servidor (null = todo bien). Se muestra en la lista.
+    private val _avisoConexion = MutableStateFlow<String?>(null)
+    val avisoConexion: StateFlow<String?> = _avisoConexion.asStateFlow()
+
+    // Evita que dos pantallas sincronicen al mismo tiempo
+    private val mutexSincronizacion = Mutex()
+
+    // ---------- Sesión ----------
+
+    /** Valida las credenciales en el microservicio de usuarios y descarga los datos del usuario. */
+    suspend fun login(correo: String, password: String): UsuarioEntity {
+        val usuario = llamarApi { usuariosApi.login(LoginRequest(correo.trim(), password)) }.aEntidad()
+        sincronizar(usuario)
+        return usuario
+    }
+
+    /**
+     * Descarga usuarios, clientes, las solicitudes visibles y su historial, y reemplaza la caché de Room.
+     * Lanza [ApiException] si algún microservicio no responde.
+     */
+    suspend fun sincronizar(usuario: UsuarioEntity) {
+        mutexSincronizacion.withLock { descargarTodo(usuario) }
+        _avisoConexion.value = null
+    }
+
+    private suspend fun descargarTodo(usuario: UsuarioEntity) {
+        val usuarios = llamarApi { usuariosApi.usuarios() }
+        val clientes = llamarApi { usuariosApi.clientes() }
+        val solicitudes = llamarApi { solicitudesApi.listar(usuario.id) }
+        val historial = llamarApi { solicitudesApi.historialVisible(usuario.id) }
+
+        db.withTransaction {
+            // Primero las tablas "padre" (por las claves foráneas de Room)
+            usuarioDao.borrarExcepto(usuarios.map { it.id })
+            usuarioDao.guardarTodos(usuarios.map { it.aEntidad() })
+            clienteDao.borrarExcepto(clientes.map { it.id })
+            clienteDao.guardarTodos(clientes.map { it.aEntidad() })
+
+            if (solicitudes.isEmpty()) solicitudDao.borrarTodas()
+            else solicitudDao.borrarExcepto(solicitudes.map { it.id })
+            solicitudDao.guardarTodas(solicitudes.map { it.aEntidad() })
+
+            historialDao.borrarTodo()
+            historialDao.guardarTodos(historial.map { it.aEntidad() })
+        }
+    }
+
+    /** Sincroniza sin interrumpir la pantalla: si falla, se sigue mostrando la caché y se publica el aviso. */
+    suspend fun intentarSincronizar(usuario: UsuarioEntity) {
+        try {
+            sincronizar(usuario)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _avisoConexion.value = e.message ?: "No se pudieron actualizar los datos"
+        }
+    }
+
+    /** Vuelve a descargar una solicitud y su historial. Si ya no existe (o no hay acceso) se quita de la caché. */
+    private suspend fun refrescarSolicitud(id: Long, usuario: UsuarioEntity) {
+        try {
+            val dto = llamarApi { solicitudesApi.obtener(id, usuario.id) }
+            guardarRespuesta(dto, usuario)
+            _avisoConexion.value = null
+        } catch (e: ApiException) {
+            if (e.codigo == 404 || e.codigo == 403) solicitudDao.eliminarPorId(id)
+            else _avisoConexion.value = e.message
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _avisoConexion.value = e.message ?: "No se pudo actualizar la solicitud"
+        }
+    }
+
+    /** Guarda en Room la solicitud que devolvió el servidor junto con su historial actualizado. */
+    private suspend fun guardarRespuesta(dto: SolicitudDto, usuario: UsuarioEntity): SolicitudEntity {
+        asegurarReferencias(dto)
+        val historial = llamarApi { solicitudesApi.historial(dto.id, usuario.id) }
+        val entidad = dto.aEntidad()
+        db.withTransaction {
+            solicitudDao.guardar(entidad)
+            historialDao.borrarDeSolicitud(dto.id)
+            historialDao.guardarTodos(historial.map { it.aEntidad() })
+        }
+        return entidad
+    }
+
+    /** Si la solicitud apunta a un cliente o técnico que todavía no está en la caché, los descarga. */
+    private suspend fun asegurarReferencias(dto: SolicitudDto) {
+        val faltaCliente = clienteDao.obtenerPorId(dto.clienteId) == null
+        val faltaResponsable = dto.responsableId?.let { usuarioDao.obtenerPorId(it) == null } ?: false
+        if (faltaCliente || faltaResponsable) {
+            val usuarios = llamarApi { usuariosApi.usuarios() }
+            val clientes = llamarApi { usuariosApi.clientes() }
+            db.withTransaction {
+                usuarioDao.guardarTodos(usuarios.map { it.aEntidad() })
+                clienteDao.guardarTodos(clientes.map { it.aEntidad() })
+            }
+        }
+    }
+
+    /** Estado anterior de la solicitud (para decidir la notificación). */
+    private suspend fun estadoPrevio(id: Long, usuario: UsuarioEntity): SolicitudEntity =
+        solicitudDao.obtenerPorId(id) ?: llamarApi { solicitudesApi.obtener(id, usuario.id) }.aEntidad()
+
+    // ---------- Crear (POST) ----------
+
     suspend fun crear(
         usuario: UsuarioEntity,
         titulo: String,
@@ -47,36 +180,55 @@ class SolicitudRepository(private val db: AppDatabase) {
         servicio: String? = null,
         sitio: String? = null,
         evidenciaUri: String? = null
-    ): Long = db.withTransaction {
-        require(usuario.perfil == Perfil.CLIENTE && usuario.clienteId != null) {
-            "Solo un cliente puede crear solicitudes"
-        }
-        require(titulo.isNotBlank()) { "El título es obligatorio" }
-        require(descripcion.isNotBlank()) { "La descripción es obligatoria" }
-
-        val id = solicitudDao.insertar(
-            SolicitudEntity(
-                codigoSeguimiento = generarCodigo(),
-                clienteId = usuario.clienteId,
-                titulo = titulo.trim(),
-                descripcion = descripcion.trim(),
-                categoria = categoria,
-                servicioRelacionado = servicio,
-                sitioOActivoRelacionado = sitio,
-                evidenciaUri = evidenciaUri
+    ): Long {
+        val dto = llamarApi {
+            solicitudesApi.crear(
+                SolicitudRequest(titulo.trim(), descripcion.trim(), categoria, servicio, sitio, evidenciaUri),
+                usuario.id
             )
-        )
-        registrarHistorial(id, null, EstadoSolicitud.RECIBIDA, "Solicitud creada", null, usuario)
-        solicitudDao.obtenerPorId(id)?.let { _eventos.tryEmit(ReglasNotificacion.nuevaSolicitud(it)) }
-        id
+        }
+        val creada = guardarRespuesta(dto, usuario)
+        _eventos.tryEmit(ReglasNotificacion.nuevaSolicitud(creada))
+        return creada.id
     }
 
-    private suspend fun generarCodigo(): String {
-        val anio = Calendar.getInstance().get(Calendar.YEAR)
-        return GeneradorCodigo.siguiente(anio, solicitudDao.codigosConPrefijo(GeneradorCodigo.prefijo(anio)))
+    // ---------- Editar (PUT) ----------
+
+    suspend fun editar(
+        solicitudId: Long,
+        usuario: UsuarioEntity,
+        titulo: String,
+        descripcion: String,
+        categoria: Categoria,
+        servicio: String?,
+        sitio: String?,
+        evidenciaUri: String?
+    ) {
+        val dto = llamarApi {
+            solicitudesApi.editar(
+                solicitudId,
+                SolicitudRequest(
+                    titulo.trim(), descripcion.trim(), categoria,
+                    servicio?.trim()?.ifBlank { null }, sitio?.trim()?.ifBlank { null }, evidenciaUri
+                ),
+                usuario.id
+            )
+        }
+        guardarRespuesta(dto, usuario)
     }
 
-    // ---------- Cambio de estado ----------
+    // ---------- Eliminar (DELETE) ----------
+
+    /** Elimina una solicitud con su historial. Solo el administrador puede hacerlo (lo valida el servidor). */
+    suspend fun eliminar(solicitudId: Long, admin: UsuarioEntity) {
+        llamarApi {
+            val respuesta = solicitudesApi.eliminar(solicitudId, admin.id)
+            if (!respuesta.isSuccessful) throw retrofit2.HttpException(respuesta)
+        }
+        solicitudDao.eliminarPorId(solicitudId) // el historial local se borra por CASCADE
+    }
+
+    // ---------- Cambio de estado (PATCH) ----------
 
     suspend fun cambiarEstado(
         solicitudId: Long,
@@ -84,66 +236,32 @@ class SolicitudRepository(private val db: AppDatabase) {
         usuario: UsuarioEntity,
         comentario: String? = null,
         accion: String? = null
-    ) = db.withTransaction {
-        val s = solicitudDao.obtenerPorId(solicitudId) ?: error("La solicitud no existe")
-        verificarAcceso(s, usuario)
-
-        check(nuevo in ReglasEstado.permitidos(usuario.perfil, s.estado)) {
-            "No puedes pasar de ${s.estado} a $nuevo"
+    ) {
+        val antes = estadoPrevio(solicitudId, usuario)
+        val dto = llamarApi {
+            solicitudesApi.cambiarEstado(solicitudId, CambioEstadoRequest(nuevo, comentario, accion), usuario.id)
         }
-        if (nuevo == EstadoSolicitud.CANCELADA) {
-            require(!comentario.isNullOrBlank()) { "Debes indicar el motivo de cancelación" }
-        }
-
-        val ahora = System.currentTimeMillis()
-        solicitudDao.actualizar(
-            s.copy(
-                estado = nuevo,
-                fechaActualizacion = ahora,
-                fechaResolucion = if (nuevo == EstadoSolicitud.RESUELTA) ahora else s.fechaResolucion,
-                confirmacionCierre = nuevo == EstadoSolicitud.CERRADA && usuario.perfil == Perfil.CLIENTE,
-                motivoCancelacion = if (nuevo == EstadoSolicitud.CANCELADA) comentario else s.motivoCancelacion
-            )
-        )
-        ReglasNotificacion.cambioEstado(s, nuevo, usuario.perfil)?.let { _eventos.tryEmit(it) }
-        registrarHistorial(s.id, s.estado, nuevo, accion ?: "Cambio de estado a ${nuevo.etiqueta()}", comentario, usuario)
+        guardarRespuesta(dto, usuario)
+        ReglasNotificacion.cambioEstado(antes, nuevo, usuario.perfil)?.let { _eventos.tryEmit(it) }
     }
 
     // ---------- Acciones del administrador ----------
 
-    /** Elimina una solicitud con su historial y evidencias. Solo el administrador puede hacerlo. */
-    suspend fun eliminar(solicitudId: Long, admin: UsuarioEntity) =
-        db.withTransaction {
-            exigirAdmin(admin)
-            val s = solicitudDao.obtenerPorId(solicitudId) ?: error("La solicitud no existe")
-            solicitudDao.eliminar(s)
-        }
+    suspend fun definirPrioridad(solicitudId: Long, prioridad: Prioridad, admin: UsuarioEntity) {
+        val antes = estadoPrevio(solicitudId, admin)
+        val dto = llamarApi { solicitudesApi.definirPrioridad(solicitudId, PrioridadRequest(prioridad), admin.id) }
+        guardarRespuesta(dto, admin)
+        _eventos.tryEmit(ReglasNotificacion.prioridadCambiada(antes, prioridad))
+    }
 
-    suspend fun definirPrioridad(solicitudId: Long, prioridad: Prioridad, admin: UsuarioEntity) =
-        db.withTransaction {
-            exigirAdmin(admin)
-            val s = solicitudDao.obtenerPorId(solicitudId) ?: error("La solicitud no existe")
-            solicitudDao.actualizar(s.copy(prioridad = prioridad, fechaActualizacion = System.currentTimeMillis()))
-            _eventos.tryEmit(ReglasNotificacion.prioridadCambiada(s, prioridad))
-            registrarHistorial(s.id, s.estado, s.estado, "Prioridad definida: ${prioridad.etiqueta()}", null, admin)
+    suspend fun asignarResponsable(solicitudId: Long, tecnicoId: Long, admin: UsuarioEntity) {
+        val antes = estadoPrevio(solicitudId, admin)
+        val dto = llamarApi {
+            solicitudesApi.asignarResponsable(solicitudId, AsignacionRequest(tecnicoId), admin.id)
         }
-
-    suspend fun asignarResponsable(solicitudId: Long, tecnicoId: Long, admin: UsuarioEntity) =
-        db.withTransaction {
-            exigirAdmin(admin)
-            val s = solicitudDao.obtenerPorId(solicitudId) ?: error("La solicitud no existe")
-            val tecnico = db.usuarioDao().obtenerPorId(tecnicoId)
-            check(tecnico != null && tecnico.perfil == Perfil.TECNICO) { "Responsable inválido" }
-
-            val nuevoEstado = if (s.estado == EstadoSolicitud.RECIBIDA || s.estado == EstadoSolicitud.EN_REVISION)
-                EstadoSolicitud.ASIGNADA
-            else s.estado
-            solicitudDao.actualizar(
-                s.copy(responsableId = tecnicoId, estado = nuevoEstado, fechaActualizacion = System.currentTimeMillis())
-            )
-            _eventos.tryEmit(ReglasNotificacion.asignada(s))
-            registrarHistorial(s.id, s.estado, nuevoEstado, "Asignada a ${tecnico.nombre}", null, admin)
-        }
+        guardarRespuesta(dto, admin)
+        _eventos.tryEmit(ReglasNotificacion.asignada(antes))
+    }
 
     /** Cantidad de solicitudes atrasadas (para avisar al administrador al entrar). */
     suspend fun contarAtrasadas(admin: UsuarioEntity): Int {
@@ -153,17 +271,12 @@ class SolicitudRepository(private val db: AppDatabase) {
 
     // ---------- Acciones del técnico ----------
 
-    suspend fun registrarAvance(solicitudId: Long, texto: String, tecnico: UsuarioEntity) =
-        db.withTransaction {
-            check(tecnico.perfil == Perfil.TECNICO) { "Solo el técnico responsable puede registrar avances" }
-            require(texto.isNotBlank()) { "Describe el avance realizado" }
-            val s = solicitudDao.obtenerPorId(solicitudId) ?: error("La solicitud no existe")
-            verificarAcceso(s, tecnico)
-            check(s.estado == EstadoSolicitud.EN_PROCESO) { "Solo se registran avances en solicitudes en proceso" }
-            solicitudDao.actualizar(s.copy(fechaActualizacion = System.currentTimeMillis()))
-            _eventos.tryEmit(ReglasNotificacion.avance(s))
-            registrarHistorial(s.id, s.estado, s.estado, "Avance registrado", texto.trim(), tecnico)
-        }
+    suspend fun registrarAvance(solicitudId: Long, texto: String, tecnico: UsuarioEntity) {
+        val antes = estadoPrevio(solicitudId, tecnico)
+        val dto = llamarApi { solicitudesApi.registrarAvance(solicitudId, TextoRequest(texto.trim()), tecnico.id) }
+        guardarRespuesta(dto, tecnico)
+        _eventos.tryEmit(ReglasNotificacion.avance(antes))
+    }
 
     /** Acciones más recientes realizadas por el usuario (historial de sus acciones). */
     fun observarActividad(usuario: UsuarioEntity): Flow<List<ActividadReciente>> =
@@ -179,46 +292,24 @@ class SolicitudRepository(private val db: AppDatabase) {
             tecnicoId = if (usuario.perfil == Perfil.TECNICO) usuario.id else null
         )
 
-    // ---------- Comentarios y evidencias ----------
+    // ---------- Comentarios ----------
 
-    suspend fun agregarComentario(solicitudId: Long, texto: String, usuario: UsuarioEntity) =
-        db.withTransaction {
-            require(texto.isNotBlank()) { "El comentario no puede estar vacío" }
-            val s = solicitudDao.obtenerPorId(solicitudId) ?: error("La solicitud no existe")
-            verificarAcceso(s, usuario)
-            solicitudDao.actualizar(s.copy(fechaActualizacion = System.currentTimeMillis()))
-            _eventos.tryEmit(ReglasNotificacion.comentario(s, usuario.perfil))
-            registrarHistorial(s.id, s.estado, s.estado, "Comentario", texto.trim(), usuario)
-        }
-
-    suspend fun adjuntarEvidencia(
-        solicitudId: Long, nombre: String, tamanoBytes: Long, descripcion: String?, usuario: UsuarioEntity
-    ) = db.withTransaction {
-        val s = solicitudDao.obtenerPorId(solicitudId) ?: error("La solicitud no existe")
-        verificarAcceso(s, usuario)
-
-        val ext = nombre.substringAfterLast('.', "").lowercase()
-        require(ext in FORMATOS_PERMITIDOS) { "Formato no permitido (usa ${FORMATOS_PERMITIDOS.joinToString()})" }
-        require(tamanoBytes <= MAX_BYTES) { "El archivo supera los 2 MB" }
-
-        val evidenciaId = evidenciaDao.insertar(
-            EvidenciaEntity(
-                solicitudId = s.id, nombreArchivo = nombre, tipo = ext, tamanoBytes = tamanoBytes,
-                adjuntadoPorUsuarioId = usuario.id, descripcion = descripcion
-            )
-        )
-        registrarHistorial(s.id, s.estado, s.estado, "Evidencia adjuntada: $nombre", null, usuario, evidenciaId)
+    suspend fun agregarComentario(solicitudId: Long, texto: String, usuario: UsuarioEntity) {
+        val antes = estadoPrevio(solicitudId, usuario)
+        val dto = llamarApi { solicitudesApi.comentar(solicitudId, TextoRequest(texto.trim()), usuario.id) }
+        guardarRespuesta(dto, usuario)
+        _eventos.tryEmit(ReglasNotificacion.comentario(antes, usuario.perfil))
     }
 
-    // ---------- Consultas / edición ----------
+    // ---------- Consultas (Room, actualizado desde el servidor al abrir la pantalla) ----------
 
-    /** Qué solicitudes ve cada perfil */
+    /** Qué solicitudes ve cada perfil (el servidor aplica la misma regla al descargarlas). */
     fun observarVisibles(usuario: UsuarioEntity): Flow<List<SolicitudEntity>> =
         when (usuario.perfil) {
             Perfil.CLIENTE -> solicitudDao.observarPorCliente(usuario.clienteId ?: -1)
             Perfil.ADMINISTRADOR -> solicitudDao.filtrar()
             Perfil.TECNICO -> solicitudDao.observarPorResponsable(usuario.id)
-        }
+        }.onStart { intentarSincronizar(usuario) }
 
     // ---------- Panel del administrador (todas exigen perfil administrador) ----------
 
@@ -239,57 +330,34 @@ class SolicitudRepository(private val db: AppDatabase) {
         return solicitudDao.observarAtrasadas(limite)
     }
 
-    fun conteoPorEstado(admin: UsuarioEntity) = run { exigirAdmin(admin); solicitudDao.conteoPorEstado() }
+    /** Al abrir el panel se descargan los datos actualizados del servidor. */
+    fun conteoPorEstado(admin: UsuarioEntity) = run {
+        exigirAdmin(admin)
+        solicitudDao.conteoPorEstado().onStart { intentarSincronizar(admin) }
+    }
+
     fun conteoPorPrioridad(admin: UsuarioEntity) = run { exigirAdmin(admin); solicitudDao.conteoPorPrioridad() }
     fun conteoPorResponsable(admin: UsuarioEntity) = run { exigirAdmin(admin); solicitudDao.conteoPorResponsable() }
-    fun observarClientes(admin: UsuarioEntity) = run { exigirAdmin(admin); db.clienteDao().observarTodos() }
-    fun observarTecnicos(): Flow<List<UsuarioEntity>> =
-        db.usuarioDao().observarPorPerfil(Perfil.TECNICO)
+    fun observarClientes(admin: UsuarioEntity) = run { exigirAdmin(admin); clienteDao.observarTodos() }
+    fun observarTecnicos(): Flow<List<UsuarioEntity>> = usuarioDao.observarPorPerfil(Perfil.TECNICO)
 
     /** Detalle de una solicitud; emite null si no existe o el usuario no tiene acceso. */
     fun observarDetalle(id: Long, usuario: UsuarioEntity): Flow<SolicitudDetalle?> =
-        solicitudDao.observarDetalle(id).map { d -> d?.takeIf { tieneAcceso(it.solicitud, usuario) } }
+        solicitudDao.observarDetalle(id)
+            .map { d -> d?.takeIf { tieneAcceso(it.solicitud, usuario) } }
+            .onStart { refrescarSolicitud(id, usuario) }
 
     fun observarHistorial(id: Long): Flow<List<EventoHistorial>> =
         historialDao.observarDetallado(id)
 
     suspend fun obtener(id: Long, usuario: UsuarioEntity): SolicitudEntity {
-        val s = solicitudDao.obtenerPorId(id) ?: error("La solicitud no existe")
-        verificarAcceso(s, usuario)
+        val s = solicitudDao.obtenerPorId(id)
+            ?: llamarApi { solicitudesApi.obtener(id, usuario.id) }.aEntidad()
+        check(tieneAcceso(s, usuario)) { "No tienes acceso a esta solicitud" }
         return s
     }
 
-    suspend fun editar(
-        solicitudId: Long,
-        usuario: UsuarioEntity,
-        titulo: String,
-        descripcion: String,
-        categoria: Categoria,
-        servicio: String?,
-        sitio: String?,
-        evidenciaUri: String?
-    ) = db.withTransaction {
-        check(usuario.perfil != Perfil.TECNICO) { "El técnico no puede editar los datos de la solicitud" }
-        val s = solicitudDao.obtenerPorId(solicitudId) ?: error("La solicitud no existe")
-        verificarAcceso(s, usuario)
-        check(s.estado != EstadoSolicitud.CERRADA && s.estado != EstadoSolicitud.CANCELADA) {
-            "No se puede editar una solicitud cerrada o cancelada"
-        }
-        solicitudDao.actualizar(
-            s.copy(
-                titulo = titulo.trim(),
-                descripcion = descripcion.trim(),
-                categoria = categoria,
-                servicioRelacionado = servicio?.trim()?.ifBlank { null },
-                sitioOActivoRelacionado = sitio?.trim()?.ifBlank { null },
-                evidenciaUri = evidenciaUri,
-                fechaActualizacion = System.currentTimeMillis()
-            )
-        )
-        registrarHistorial(s.id, s.estado, s.estado, "Datos de la solicitud editados", null, usuario)
-    }
-
-    // ---------- Reglas internas ----------
+    // ---------- Reglas internas (la validación definitiva la hace el servidor) ----------
 
     private fun tieneAcceso(s: SolicitudEntity, u: UsuarioEntity): Boolean = when (u.perfil) {
         Perfil.ADMINISTRADOR -> true
@@ -297,38 +365,6 @@ class SolicitudRepository(private val db: AppDatabase) {
         Perfil.TECNICO -> s.responsableId == u.id
     }
 
-    private fun verificarAcceso(s: SolicitudEntity, u: UsuarioEntity) {
-        check(tieneAcceso(s, u)) { "No tienes acceso a esta solicitud" }
-    }
-
     private fun exigirAdmin(u: UsuarioEntity) =
         check(u.perfil == Perfil.ADMINISTRADOR) { "Acción reservada al administrador" }
-
-    private suspend fun registrarHistorial(
-        solicitudId: Long,
-        anterior: EstadoSolicitud?,
-        nuevo: EstadoSolicitud,
-        accion: String,
-        comentario: String?,
-        usuario: UsuarioEntity,
-        evidenciaId: Long? = null
-    ) {
-        historialDao.insertar(
-            HistorialEntity(
-                solicitudId = solicitudId,
-                estadoAnterior = anterior,
-                estadoNuevo = nuevo,
-                accionRealizada = accion,
-                comentario = comentario,
-                perfilQueRealizoAccion = usuario.perfil,
-                usuarioResponsableId = usuario.id,
-                archivoEvidenciaId = evidenciaId
-            )
-        )
-    }
-
-    companion object {
-        private val FORMATOS_PERMITIDOS = setOf("jpg", "jpeg", "png", "pdf")
-        private const val MAX_BYTES = 2L * 1024 * 1024
-    }
 }

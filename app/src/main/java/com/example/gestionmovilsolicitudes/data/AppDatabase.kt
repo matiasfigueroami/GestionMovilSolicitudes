@@ -23,7 +23,8 @@ import com.example.gestionmovilsolicitudes.data.entity.UsuarioEntity
         HistorialEntity::class,
         EvidenciaEntity::class
     ],
-    version = 1,
+    // v2: los datos vienen de los microservicios (Room queda como caché local)
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -43,7 +44,10 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "gestion_solicitudes.db"
-                ).build().also { INSTANCE = it }
+                )
+                    // La caché se vuelve a descargar del servidor, así que se puede recrear sin migración
+                    .fallbackToDestructiveMigration(dropAllTables = true)
+                    .build().also { INSTANCE = it }
             }
     }
 }

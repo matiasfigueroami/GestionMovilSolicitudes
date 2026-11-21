@@ -5,6 +5,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import com.example.gestionmovilsolicitudes.data.entity.ClienteEntity
 import com.example.gestionmovilsolicitudes.data.entity.EvidenciaEntity
 import com.example.gestionmovilsolicitudes.data.entity.HistorialEntity
@@ -72,6 +73,13 @@ interface UsuarioDao {
 
     @Query("SELECT COUNT(*) FROM usuarios")
     suspend fun contar(): Int
+
+    // ---- Sincronización con el microservicio de usuarios ----
+    @Upsert
+    suspend fun guardarTodos(usuarios: List<UsuarioEntity>)
+
+    @Query("DELETE FROM usuarios WHERE id NOT IN (:ids)")
+    suspend fun borrarExcepto(ids: List<Long>)
 }
 
 @Dao
@@ -84,6 +92,13 @@ interface ClienteDao {
 
     @Query("SELECT * FROM clientes ORDER BY nombreCliente")
     fun observarTodos(): Flow<List<ClienteEntity>>
+
+    // ---- Sincronización con el microservicio de usuarios ----
+    @Upsert
+    suspend fun guardarTodos(clientes: List<ClienteEntity>)
+
+    @Query("DELETE FROM clientes WHERE id NOT IN (:ids)")
+    suspend fun borrarExcepto(ids: List<Long>)
 }
 
 @Dao
@@ -98,8 +113,22 @@ interface SolicitudDao {
     @Delete
     suspend fun eliminar(solicitud: SolicitudEntity)
 
-    @Query("SELECT codigoSeguimiento FROM solicitudes WHERE codigoSeguimiento LIKE :prefijo || '%'")
-    suspend fun codigosConPrefijo(prefijo: String): List<String>
+    // ---- Sincronización con el microservicio de solicitudes ----
+    // @Upsert actualiza sin borrar la fila, así no se dispara el CASCADE sobre el historial.
+    @Upsert
+    suspend fun guardar(solicitud: SolicitudEntity)
+
+    @Upsert
+    suspend fun guardarTodas(solicitudes: List<SolicitudEntity>)
+
+    @Query("DELETE FROM solicitudes WHERE id NOT IN (:ids)")
+    suspend fun borrarExcepto(ids: List<Long>)
+
+    @Query("DELETE FROM solicitudes")
+    suspend fun borrarTodas()
+
+    @Query("DELETE FROM solicitudes WHERE id = :id")
+    suspend fun eliminarPorId(id: Long)
 
     @Query("SELECT * FROM solicitudes WHERE id = :id")
     fun observarPorId(id: Long): Flow<SolicitudEntity?>
@@ -175,6 +204,16 @@ interface SolicitudDao {
 interface HistorialDao {
     @Insert
     suspend fun insertar(evento: HistorialEntity): Long
+
+    // ---- Sincronización con el microservicio de solicitudes ----
+    @Upsert
+    suspend fun guardarTodos(eventos: List<HistorialEntity>)
+
+    @Query("DELETE FROM historial WHERE solicitudId = :solicitudId")
+    suspend fun borrarDeSolicitud(solicitudId: Long)
+
+    @Query("DELETE FROM historial")
+    suspend fun borrarTodo()
 
     @Query("SELECT * FROM historial WHERE solicitudId = :solicitudId ORDER BY fechaHora ASC, id ASC")
     fun observarPorSolicitud(solicitudId: Long): Flow<List<HistorialEntity>>

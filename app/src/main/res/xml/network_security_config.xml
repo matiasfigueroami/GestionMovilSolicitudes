@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Los microservicios corren en el computador con HTTP (sin HTTPS), así que se permite
+  tráfico sin cifrar. La API externa (mindicador.cl) sigue usando HTTPS.
+  Proyecto académico: en producción se usaría HTTPS también para el backend.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

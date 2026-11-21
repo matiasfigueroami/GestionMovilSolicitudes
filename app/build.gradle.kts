@@ -19,6 +19,13 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // URLs de los microservicios. 10.0.2.2 es el "localhost" del computador visto desde el emulador.
+        // En un teléfono físico, reemplazar por la IP del computador en la red Wi-Fi (por ejemplo 192.168.1.20).
+        buildConfigField("String", "USUARIOS_URL", "\"http://10.0.2.2:8081/\"")
+        buildConfigField("String", "SOLICITUDES_URL", "\"http://10.0.2.2:8082/\"")
+        // API externa pública (indicadores económicos de Chile)
+        buildConfigField("String", "INDICADORES_URL", "\"https://mindicador.cl/\"")
     }
 
     buildTypes {
@@ -34,6 +41,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -54,6 +62,10 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.kotlinx.coroutines.android)
+    // Retrofit: microservicios Spring Boot y API externa
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
+    implementation(libs.okhttp.logging)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

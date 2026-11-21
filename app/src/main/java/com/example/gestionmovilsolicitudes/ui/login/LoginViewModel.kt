@@ -39,16 +39,16 @@ class LoginViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
 
-        // 2. Autenticar
+        // 2. Autenticar contra el microservicio de usuarios (POST /api/auth/login)
         viewModelScope.launch {
             _uiState.update { it.copy(cargando = true, error = null) }
-            gestion.seedJob.join() // espera a que existan los datos de prueba
-            val usuario = gestion.database.usuarioDao().login(st.correo.trim(), st.password)
-            if (usuario == null) {
-                _uiState.update { it.copy(cargando = false, error = "Correo o contraseña incorrectos") }
-            } else {
+            try {
+                val usuario = gestion.repository.login(st.correo.trim(), st.password)
                 SessionManager.iniciar(usuario)
                 _uiState.update { it.copy(cargando = false) }
+            } catch (e: Exception) {
+                // Credenciales incorrectas o servidor apagado: el mensaje viene listo para mostrar
+                _uiState.update { it.copy(cargando = false, error = e.message ?: "No se pudo iniciar sesión") }
             }
         }
     }
