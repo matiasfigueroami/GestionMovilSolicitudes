@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -28,11 +30,31 @@ android {
         buildConfigField("String", "INDICADORES_URL", "\"https://mindicador.cl/\"")
     }
 
+    // Firma del APK release. La ruta del .jks y las claves se leen de keystore.properties (en la raíz)
+    // para no escribir contraseñas en este archivo. La ruta es relativa a la raíz del proyecto.
+    val keystoreProps = Properties().apply {
+        val archivo = rootProject.file("keystore.properties")
+        if (archivo.exists()) archivo.inputStream().use { load(it) }
+    }
+
+    signingConfigs {
+        if (keystoreProps.containsKey("storeFile")) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             optimization {
                 enable = false
             }
+            // Si no existe keystore.properties el release sale sin firmar (el proyecto igual compila)
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
     compileOptions {
