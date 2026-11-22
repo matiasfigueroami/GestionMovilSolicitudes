@@ -6,6 +6,15 @@ Una pequeña empresa de servicios informáticos recibe hoy los requerimientos de
 
 > Proyecto académico (MVP). Usa únicamente **datos ficticios**: usuarios, clientes, solicitudes y fotos de prueba.
 
+El repositorio contiene **dos partes** que trabajan juntas:
+
+| Parte | Carpeta | Tecnología |
+|---|---|---|
+| App Android | `app/` | Kotlin, Jetpack Compose, MVVM, Room y Retrofit |
+| Backend (2 microservicios) | `backend/` | Spring Boot 3.5, Spring Data JPA, MySQL o H2 |
+
+La app consume los microservicios con **Retrofit** y una **API externa pública** (indicadores económicos de Chile). Room queda como caché local de lo que responde el servidor.
+
 ## Integrantes
 
 | Nombre | Aporte principal                                                                                                                            |
@@ -45,6 +54,13 @@ Una pequeña empresa de servicios informáticos recibe hoy los requerimientos de
 - **Panel del técnico:** indicadores, lista ordenada (las más urgentes primero) y su actividad reciente.
 - Inicia el trabajo, registra avances, pide información al cliente y registra la solución para resolver.
 
+### Integración con el backend y la API externa
+- El inicio de sesión se valida en el microservicio de usuarios (`POST /api/auth/login`): una clave incorrecta devuelve 401 y la app muestra el mensaje.
+- Crear, editar, **eliminar**, cambiar estado, asignar, comentar y registrar avances se envían al microservicio de solicitudes. El servidor aplica las reglas de acceso por perfil (por ejemplo, un cliente recibe 403 si intenta cambiar la prioridad o eliminar).
+- El código de seguimiento (`SOL-AAAA-NNNN`) y el historial los genera el servidor.
+- Si el servidor no responde, la lista muestra un aviso de "sin conexión" y usa los datos guardados en Room. El botón **Actualizar** vuelve a descargarlos.
+- **API externa:** el menú muestra los indicadores económicos del día (UF, dólar, euro y UTM) desde `mindicador.cl`, consumidos con Retrofit sin interferir con los datos propios.
+
 ## Interfaz y experiencia de usuario
 
 - **Formularios validados con íconos y mensajes por campo:** inicio de sesión, nueva solicitud y edición, comentarios, buscador y cuadros de texto de las acciones (reapertura, respuesta, avance, solución). Cada campo muestra su ícono, se marca en rojo con un ícono de advertencia y despliega el mensaje de error debajo. Todos usan un mismo componente reutilizable (`CampoFormulario`).
@@ -69,11 +85,29 @@ Estados: *Recibida → En revisión → Pendiente de información → Asignada �
 
 ## Arquitectura
 
-Patrón **MVVM** con persistencia local en **Room**. Las pantallas solo muestran un `UiState` expuesto como `StateFlow` y notifican eventos al `ViewModel`; la validación y las reglas de negocio no viven en la interfaz.
+Patrón **MVVM**. Las pantallas solo muestran un `UiState` expuesto como `StateFlow` y notifican eventos al `ViewModel`; la validación y las reglas de negocio no viven en la interfaz.
 
 ```
-Pantalla (Compose) -> ViewModel (UiState + StateFlow) -> Repository -> DAO -> Room (SQLite)
+Pantalla (Compose) -> ViewModel (UiState + StateFlow) -> Repository
+                                                           |-- Retrofit --HTTP--> microservicios Spring Boot --> MySQL / H2
+                                                           |-- Retrofit --HTTPS-> mindicador.cl (API externa)
+                                                           '-- DAO --> Room (SQLite, caché local)
 ```
+
+- Las **escrituras** van al servidor; con su respuesta se actualiza Room.
+- Las **pantallas observan Room** (`Flow`), así que se refrescan solas cuando llegan los datos.
+- La app llega al backend con `10.0.2.2` (el computador visto desde el emulador). Las URLs están en `app/build.gradle.kts`.
+
+Backend (`backend/`), cada microservicio con su propia base de datos:
+
+```
+backend/
+├── usuarios-service/      puerto 8081: login, usuarios (perfiles) y clientes
+└── solicitudes-service/   puerto 8082: solicitudes, historial, reglas de estado y estadísticas
+                           (consulta a usuarios-service para saber quién hace cada petición)
+```
+
+Cada petición a solicitudes-service lleva la cabecera `X-Usuario-Id`; el servidor consulta el perfil de ese usuario y decide qué puede ver y hacer.
 
 ```
 app/src/main/java/com/example/gestionmovilsolicitudes/
@@ -82,14 +116,16 @@ app/src/main/java/com/example/gestionmovilsolicitudes/
 │   ├── entity/         tablas: usuarios, clientes, solicitudes, historial, evidencias
 │   ├── repository/     SolicitudRepository (reglas de acceso y transacciones)
 │   ├── AppDatabase.kt
-│   └── SeedData.kt     datos ficticios de demostración
+│   ├── remote/         Retrofit: ApiClient, UsuariosApi, SolicitudesApi, DTOs y mapeos
+│   │   └── externa/    IndicadoresApi (mindicador.cl)
+│   └── SeedData.kt     datos de demostración locales (ya no se usan: los siembra el backend)
 ├── domain/             reglas puras: ValidadorSolicitud, ValidadorLogin, ValidadorTexto, ReglasEstado,
 │                       ReglasAtraso, ReglasNotificacion, MensajeSeguimiento
 ├── model/              enums: Categoria, EstadoSolicitud, Prioridad, Perfil
 ├── notificaciones/     Notificador (canal, permiso y avisos) y UltimaConexion
 ├── session/            SessionManager (usuario conectado)
 ├── ui/
-│   ├── login/  menu/  solicitud/  admin/  tecnico/
+│   ├── login/  menu/  solicitud/  admin/  tecnico/  indicadores/
 │   ├── componentes/    CampoFormulario, ErrorAnimado, ContadorAnimado (reutilizables)
 │   ├── navigation/     AppNavigation (rutas y transiciones)
 │   └── theme/
@@ -105,7 +141,10 @@ app/src/main/java/com/example/gestionmovilsolicitudes/
 | Interfaz | Jetpack Compose y Material Design 3 (BOM 2026.02.01) |
 | Navegación | Navigation Compose 2.10.2 |
 | Estado | ViewModel 2.11.0, StateFlow y corrutinas 1.10.2 |
-| Persistencia | Room 2.8.5 (con KSP) |
+| Persistencia local (caché) | Room 2.8.5 (con KSP) |
+| Red | Retrofit 3.0.0, convertidor Gson y OkHttp 4.12.0 (logging) |
+| Backend | Java 17, Spring Boot 3.5.7, Spring Data JPA, Bean Validation, Swagger (springdoc) |
+| Base de datos del backend | MySQL (por defecto) o H2 en archivo (perfil `h2`, sin instalar nada) |
 | Imágenes | Coil 3.1.0 |
 | Build | Android Gradle Plugin 9.4.1 y Gradle 9.6.0 |
 | Plataforma | Android, `minSdk` 24 y `targetSdk` 37 |
@@ -120,20 +159,55 @@ app/src/main/java/com/example/gestionmovilsolicitudes/
 
 ## Cómo ejecutar el proyecto
 
-1. Instalar una versión reciente de **Android Studio** compatible con Android Gradle Plugin 9.4.1 (incluye el JDK necesario).
-2. Clonar el repositorio:
-   ```bash
-   git clone https://github.com/matiasfigueroami/GestionMovilSolicitudes.git
-   ```
-3. Abrir la carpeta en Android Studio y esperar a que termine la sincronización de Gradle (**Sync Now**, requiere internet la primera vez).
-4. Crear o elegir un emulador (por ejemplo, Pixel 7 con una imagen reciente de Android) o conectar un teléfono con depuración USB.
-5. Presionar **Run ▶**. Al primer arranque la app crea la base de datos y carga los datos de demostración.
+La app necesita el backend encendido: **primero se levantan los microservicios y después se abre la app**.
 
-> Si se necesita partir de cero, desinstalar la app del emulador para que se vuelva a crear la base de datos.
+### 1. Clonar el repositorio
+
+```bash
+git clone https://github.com/matiasfigueroami/GestionMovilSolicitudes.git
+```
+
+### 2. Levantar el backend (`backend/`)
+
+Requiere **Java 17 o superior**. Se puede usar sin instalar MySQL con el perfil `h2`, que guarda la base en un archivo local (`backend/<servicio>/data/`).
+
+**Opción A: IntelliJ IDEA (recomendada)**
+1. Abrir la carpeta `backend/` (el `pom.xml` se reconoce como proyecto Maven).
+2. Ejecutar **primero** `UsuariosServiceApplication` (puerto 8081) y **después** `SolicitudesServiceApplication` (puerto 8082).
+3. En *Edit Configurations*, escribir `h2` en **Active profiles** de ambas. La consola debe decir `The following 1 profile is active: "h2"` y terminar con `Started ...Application`.
+
+**Opción B: terminal** (requiere Maven), dentro de `backend/`:
+```bash
+mvn -pl usuarios-service spring-boot:run -Dspring-boot.run.profiles=h2
+mvn -pl solicitudes-service spring-boot:run -Dspring-boot.run.profiles=h2   # en otra terminal
+```
+
+**Con MySQL** en lugar de H2: encender MySQL en el puerto 3306 y ejecutar sin perfil (las bases `gestion_usuarios` y `gestion_solicitudes` se crean solas; usuario `root` sin clave, configurable con `DB_USER` y `DB_PASSWORD`).
+
+Comprobar que responde:
+```bash
+curl -X POST http://localhost:8081/api/auth/login -H "Content-Type: application/json" -d '{"correo":"admin@demo.cl","password":"1234"}'
+```
+Documentación Swagger: http://localhost:8081/swagger-ui.html y http://localhost:8082/swagger-ui.html. Consola H2 (solo perfil `h2`): `http://localhost:8082/h2-console` con JDBC URL `jdbc:h2:file:./data/gestion_solicitudes`, usuario `sa` y sin contraseña.
+
+> En el primer arranque se cargan los datos de demostración. `usuarios-service` debe arrancar primero y sobre una base vacía: si se borra una base, hay que borrar también la otra (carpetas `data/`).
+
+### 3. Ejecutar la app
+
+1. Instalar una versión reciente de **Android Studio** compatible con Android Gradle Plugin 9.4.1 (incluye el JDK necesario).
+2. Abrir la carpeta raíz del repositorio (no `backend/`) y esperar a que termine la sincronización de Gradle (**Sync Now**, requiere internet la primera vez).
+3. Crear o elegir un emulador (por ejemplo, Pixel 7 con una imagen reciente de Android).
+4. Presionar **Run ▶**.
+
+La app llega al backend por `http://10.0.2.2:8081/` y `http://10.0.2.2:8082/`. Con un **teléfono físico** en la misma red Wi-Fi, cambiar esas dos URLs en `app/build.gradle.kts` por la IP del computador (por ejemplo `http://192.168.1.20:8081/`) y permitir los puertos en el firewall de Windows.
+
+Para ver las peticiones de Retrofit: **Logcat** con el filtro `okhttp`.
+
+> Si se necesita partir de cero, desinstalar la app del emulador (se borra la caché de Room).
 
 ### Cuentas de demostración
 
-Datos ficticios definidos en `data/SeedData.kt`. Contraseña de todas las cuentas: `1234`.
+Datos ficticios que carga el backend al iniciar. Contraseña de todas las cuentas: `1234`.
 
 | Perfil | Correo |
 |---|---|
@@ -155,6 +229,82 @@ Al cambiar de perfil, cada usuario ve en la barra de notificaciones las novedade
 - La cámara del emulador muestra una escena virtual: es lo esperado.
 - Las horas se muestran según la zona horaria del dispositivo. Si el emulador está en GMT, configurarlo en *Santiago (Chile)* para ver la hora local.
 
+## Endpoints utilizados
+
+### API externa (consumida por la app con Retrofit)
+
+| Método | URL | Descripción |
+|---|---|---|
+| GET | `https://mindicador.cl/api` | Indicadores económicos de Chile del día (UF, dólar, euro, UTM). Se muestran en el menú principal |
+
+### Microservicio de usuarios (puerto 8081)
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| POST | `/api/auth/login` | Inicio de sesión `{correo, password}` → usuario (401 si no coincide) |
+| GET | `/api/usuarios?perfil=TECNICO` | Lista de usuarios (filtro opcional por perfil) |
+| GET | `/api/usuarios/{id}` | Un usuario |
+| POST | `/api/usuarios` | Crear usuario |
+| PUT | `/api/usuarios/{id}` | Editar usuario (contraseña vacía = mantener) |
+| DELETE | `/api/usuarios/{id}` | Eliminar usuario |
+| GET / POST | `/api/clientes` | Listar / crear clientes |
+| GET / PUT / DELETE | `/api/clientes/{id}` | Ver / editar / eliminar cliente |
+
+### Microservicio de solicitudes (puerto 8082)
+
+Todas las rutas llevan la cabecera `X-Usuario-Id`.
+
+| Método | Ruta | Quién | Descripción |
+|---|---|---|---|
+| GET | `/api/solicitudes` | Todos | Solicitudes visibles para el perfil. Filtros: `estado`, `prioridad`, `clienteId`, `responsableId`, `texto` |
+| GET | `/api/solicitudes/{id}` | Con acceso | Detalle |
+| POST | `/api/solicitudes` | Cliente | Crear (genera el código `SOL-AAAA-NNNN` y el estado *Recibida*) |
+| PUT | `/api/solicitudes/{id}` | Cliente / Admin | Editar (no si está cerrada o cancelada) |
+| DELETE | `/api/solicitudes/{id}` | Admin | Eliminar con su historial |
+| PATCH | `/api/solicitudes/{id}/estado` | Según reglas | `{estado, comentario, accion}` |
+| PATCH | `/api/solicitudes/{id}/prioridad` | Admin | `{prioridad}` |
+| PATCH | `/api/solicitudes/{id}/responsable` | Admin | `{tecnicoId}` (valida contra usuarios-service que sea técnico) |
+| POST | `/api/solicitudes/{id}/avances` | Técnico | `{texto}` (solo en proceso) |
+| POST | `/api/solicitudes/{id}/comentarios` | Con acceso | `{texto}` |
+| GET | `/api/solicitudes/{id}/historial` | Con acceso | Historial cronológico |
+| GET | `/api/historial` | Todos | Historial de todas sus solicitudes visibles |
+| GET | `/api/solicitudes/estadisticas` | Admin | Total, atrasadas, por estado, prioridad y responsable |
+
+Los errores responden JSON `{ "estado": 409, "mensaje": "...", "timestamp": ... }` y la app muestra el `mensaje` tal cual. Más detalle en [`backend/README.md`](backend/README.md).
+
+## APK firmado y llave (.jks)
+
+El APK release se firma con una llave propia. La configuración está en `app/build.gradle.kts` (bloque `signingConfigs`), que lee los datos desde `keystore.properties` en la raíz del proyecto.
+
+| Elemento | Ubicación |
+|---|---|
+| Llave de firma (`.jks`) | `keystore/gestionmovil.jks` |
+| Configuración de la firma | `keystore.properties` y `app/build.gradle.kts` |
+| APK firmado | `app/release/app-release.apk` |
+
+> La llave se incluye en el repositorio solo porque la entrega académica lo exige. Es una llave de pruebas y no debe usarse para publicar aplicaciones reales.
+
+Generar el APK firmado desde la terminal:
+```bash
+./gradlew assembleRelease
+```
+Queda en `app/build/outputs/apk/release/app-release.apk`. También se puede generar con **Build → Generate Signed App Bundle / APK**.
+
+Comprobar la firma:
+```bash
+apksigner verify --print-certs app/release/app-release.apk
+```
+
+### Capturas
+
+**APK firmado**
+
+![APK firmado](docs/capturas/apk-firmado.png)
+
+**Llave `.jks`**
+
+![Llave jks](docs/capturas/keystore-jks.png)
+
 ## Pruebas
 
 Las pruebas están separadas según lo que verifican:
@@ -168,6 +318,13 @@ Las pruebas están separadas según lo que verifican:
 
 ```bash
 ./gradlew testDebugUnitTest
+```
+
+**Pruebas del backend** (`backend/solicitudes-service/src/test`, JUnit). Verifican las reglas de negocio del servidor (`ReglasNegocioTest`):
+
+```bash
+cd backend
+mvn test
 ```
 
 **Pruebas instrumentadas de la vista** (`app/src/androidTest`, se ejecutan en un emulador o teléfono). Verifican lo que se ve en pantalla con Compose:
