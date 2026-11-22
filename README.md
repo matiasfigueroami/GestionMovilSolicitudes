@@ -169,20 +169,20 @@ git clone https://github.com/matiasfigueroami/GestionMovilSolicitudes.git
 
 ### 2. Levantar el backend (`backend/`)
 
-Requiere **Java 17 o superior**. Se puede usar sin instalar MySQL con el perfil `h2`, que guarda la base en un archivo local (`backend/<servicio>/data/`).
+Requiere **Java 17 o superior**. Por defecto los servicios usan el perfil `h2`: una base H2 guardada en un archivo local (carpeta `data/`), así que **no hace falta instalar MySQL ni configurar nada**.
 
 **Opción A: IntelliJ IDEA (recomendada)**
 1. Abrir la carpeta `backend/` (el `pom.xml` se reconoce como proyecto Maven).
 2. Ejecutar **primero** `UsuariosServiceApplication` (puerto 8081) y **después** `SolicitudesServiceApplication` (puerto 8082).
-3. En *Edit Configurations*, escribir `h2` en **Active profiles** de ambas. La consola debe decir `The following 1 profile is active: "h2"` y terminar con `Started ...Application`.
+3. La consola debe decir `The following 1 profile is active: "h2"` y terminar con `Started ...Application`.
 
 **Opción B: terminal** (requiere Maven), dentro de `backend/`:
 ```bash
-mvn -pl usuarios-service spring-boot:run -Dspring-boot.run.profiles=h2
-mvn -pl solicitudes-service spring-boot:run -Dspring-boot.run.profiles=h2   # en otra terminal
+mvn -pl usuarios-service spring-boot:run
+mvn -pl solicitudes-service spring-boot:run   # en otra terminal
 ```
 
-**Con MySQL** en lugar de H2: encender MySQL en el puerto 3306 y ejecutar sin perfil (las bases `gestion_usuarios` y `gestion_solicitudes` se crean solas; usuario `root` sin clave, configurable con `DB_USER` y `DB_PASSWORD`).
+**Con MySQL** en lugar de H2: encender MySQL en el puerto 3306 y ejecutar con el perfil `mysql` (por ejemplo `--spring.profiles.active=mysql`). Las bases `gestion_usuarios` y `gestion_solicitudes` se crean solas; usuario `root` sin clave, configurable con `DB_USER` y `DB_PASSWORD`.
 
 Comprobar que responde:
 ```bash
