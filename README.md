@@ -297,11 +297,11 @@ apksigner verify --print-certs app/release/app-release.apk
 
 ### Capturas
 
-**APK firmado**
+**APK firmado** (salida de `apksigner verify` sobre `app/release/app-release.apk`)
 
 ![APK firmado](docs/capturas/apk-firmado.png)
 
-**Llave `.jks`**
+**Llave `.jks`** (contenido de la carpeta `keystore/` del repositorio)
 
 ![Llave jks](docs/capturas/keystore-jks.png)
 
